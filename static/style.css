@@ -1,0 +1,82 @@
+/* ── Sidebar ─────────────────────────────────────────────────────── */
+.sidebar {
+  overflow-x: hidden;
+}
+
+.sidebar-list {
+  overflow-y: auto;
+}
+
+.sidebar-item {
+  border-left: 3px solid transparent;
+  transition: background 0.1s;
+  color: #495057;
+  line-height: 1.3;
+}
+
+.sidebar-item:hover {
+  background: #e9ecef;
+  color: #212529;
+}
+
+.sidebar-active {
+  background: #e8f0fe !important;
+  border-left-color: #0d6efd !important;
+  color: #0d6efd !important;
+  font-weight: 600;
+}
+
+.sidebar-done {
+  color: #6c757d;
+}
+
+.sidebar-pending {
+  color: #212529;
+}
+
+/* ── Zona de drop / screenshot ───────────────────────────────────── */
+.drop-zone {
+  border: 2px dashed #ced4da;
+  border-radius: 8px;
+  padding: 24px 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+}
+
+.drop-zone:hover,
+.drop-zone.drag-over {
+  border-color: #0d6efd;
+  background: #f0f4ff;
+}
+
+.drop-zone-filled {
+  border-style: solid;
+  border-color: #198754;
+  padding: 8px;
+}
+
+.screenshot-preview {
+  max-width: 100%;
+  max-height: 280px;
+  border-radius: 4px;
+  object-fit: contain;
+}
+
+/* ── Misc ─────────────────────────────────────────────────────────── */
+.overflow-y-auto {
+  overflow-y: auto;
+}
+
+.table td, .table th {
+  vertical-align: middle;
+}
+
+kbd {
+  font-size: 0.75em;
+}

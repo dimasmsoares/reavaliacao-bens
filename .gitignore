@@ -1,0 +1,23 @@
+# Ambiente virtual Python
+.venv/
+
+# Banco de dados operacional
+reavaliacao.db
+reavaliacao.db-wal
+reavaliacao.db-shm
+
+# Dados gerados em execução
+screenshots/
+output/
+
+# Cache Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Configurações locais do Claude Code
+.claude/
+
+# Arquivos do sistema operacional
+.DS_Store
+Thumbs.db

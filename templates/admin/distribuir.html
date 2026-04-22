@@ -1,0 +1,174 @@
+{% extends 'base.html' %}
+{% block title %}Distribuir Bens{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0 fw-bold">
+    <i class="bi bi-distribute-vertical me-2 text-primary"></i>Distribuição de Bens
+  </h4>
+  <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left"></i> Voltar
+  </a>
+</div>
+
+<!-- Resumo não distribuídos -->
+{% if unassigned %}
+<div class="alert alert-warning py-2 mb-3">
+  <i class="bi bi-exclamation-triangle me-1"></i>
+  <strong>Bens não distribuídos:</strong>
+  {% for u in unassigned %}
+    <span class="badge bg-secondary ms-1">{{ u.planilha | planilha_curta }}: {{ u.total }}</span>
+  {% endfor %}
+</div>
+{% else %}
+<div class="alert alert-success py-2 mb-3">
+  <i class="bi bi-check-circle me-1"></i> Todos os bens já foram distribuídos.
+</div>
+{% endif %}
+
+<div class="row g-3">
+  <!-- Por planilha -->
+  <div class="col-md-4">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-header bg-white fw-semibold border-0">
+        <i class="bi bi-table me-1 text-info"></i> Por Planilha
+      </div>
+      <div class="card-body">
+        <form method="post">
+          <input type="hidden" name="mode" value="planilha">
+          <div class="mb-3">
+            <label class="form-label">Planilha</label>
+            <select name="planilha" class="form-select" required>
+              <option value="">Selecione…</option>
+              {% for p in planilhas %}
+              <option value="{{ p }}">{{ p | planilha_curta }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Servidor</label>
+            <select name="user_id" class="form-select" required>
+              <option value="">Selecione…</option>
+              {% for u in users %}
+              <option value="{{ u.id }}">{{ u.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <button class="btn btn-info w-100 text-white fw-semibold">
+            <i class="bi bi-check2-all me-1"></i> Atribuir planilha inteira
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Por quantidade -->
+  <div class="col-md-4">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-header bg-white fw-semibold border-0">
+        <i class="bi bi-123 me-1 text-primary"></i> Por Quantidade
+      </div>
+      <div class="card-body">
+        <form method="post">
+          <input type="hidden" name="mode" value="quantidade">
+          <div class="mb-3">
+            <label class="form-label">Quantidade de bens</label>
+            <input type="number" name="quantidade" class="form-control"
+                   min="1" required placeholder="ex: 500">
+            <div class="form-text">Pega os primeiros N bens não atribuídos.</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Servidor</label>
+            <select name="user_id" class="form-select" required>
+              <option value="">Selecione…</option>
+              {% for u in users %}
+              <option value="{{ u.id }}">{{ u.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <button class="btn btn-primary w-100 fw-semibold">
+            <i class="bi bi-send me-1"></i> Atribuir quantidade
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Redistribuir -->
+  <div class="col-md-4">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-header bg-white fw-semibold border-0">
+        <i class="bi bi-arrow-left-right me-1 text-warning"></i> Redistribuir
+      </div>
+      <div class="card-body">
+        <p class="text-muted small">Move bens <strong>não avaliados</strong> de um servidor para outro.</p>
+        <form method="post">
+          <input type="hidden" name="mode" value="redistribuir">
+          <div class="mb-3">
+            <label class="form-label">Origem (servidor atual)</label>
+            <select name="from_user_id" class="form-select" required>
+              <option value="">Selecione…</option>
+              {% for u in users %}
+              <option value="{{ u.id }}">{{ u.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Destino (novo servidor)</label>
+            <select name="user_id" class="form-select" required>
+              <option value="">Selecione…</option>
+              {% for u in users %}
+              <option value="{{ u.id }}">{{ u.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <button class="btn btn-warning w-100 fw-semibold"
+                  onclick="return confirm('Mover todos os bens pendentes?')">
+            <i class="bi bi-arrow-left-right me-1"></i> Redistribuir pendentes
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tabela de andamento por servidor -->
+{% if users_progress %}
+<div class="card border-0 shadow-sm mt-4">
+  <div class="card-header bg-white fw-semibold border-0">
+    <i class="bi bi-bar-chart me-1 text-primary"></i> Andamento por Servidor
+  </div>
+  <div class="card-body p-0">
+    <table class="table table-sm table-hover mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Servidor</th>
+          <th class="text-end">Atribuídos</th>
+          <th class="text-end">Concluídos</th>
+          <th class="text-end">Pendentes</th>
+          <th style="width:25%">Progresso</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users_progress %}
+        {% set pct = (u.reviewed / u.total * 100) | round(1) if u.total > 0 else 0 %}
+        <tr>
+          <td>{{ u.name }}</td>
+          <td class="text-end">{{ u.total }}</td>
+          <td class="text-end text-success fw-semibold">{{ u.reviewed }}</td>
+          <td class="text-end text-warning fw-semibold">{{ u.total - u.reviewed }}</td>
+          <td>
+            <div class="progress" style="height:14px;">
+              <div class="progress-bar {% if pct == 100 %}bg-success{% else %}bg-primary{% endif %}"
+                   style="width:{{ pct }}%"></div>
+            </div>
+            <small class="text-muted">{{ pct }}%</small>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,94 @@
+{% extends 'base.html' %}
+{% block title %}Servidores{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0 fw-bold"><i class="bi bi-people me-2 text-primary"></i>Servidores</h4>
+  <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left"></i> Voltar
+  </a>
+</div>
+
+<div class="row g-3">
+  <!-- Criar servidor -->
+  <div class="col-lg-4">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white fw-semibold border-0">
+        <i class="bi bi-person-plus me-1 text-success"></i> Novo Servidor
+      </div>
+      <div class="card-body">
+        <form method="post">
+          <div class="mb-3">
+            <label class="form-label">Nome de usuário</label>
+            <input type="text" name="name" class="form-control" required
+                   placeholder="ex: joao.silva">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Senha inicial</label>
+            <input type="text" name="password" class="form-control" required
+                   placeholder="Mínimo 4 caracteres" minlength="4">
+            <div class="form-text">O servidor poderá continuar usando esta senha.</div>
+          </div>
+          <button type="submit" class="btn btn-success w-100">
+            <i class="bi bi-plus-circle me-1"></i> Criar Servidor
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lista de servidores -->
+  <div class="col-lg-8">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white fw-semibold border-0">
+        <i class="bi bi-list-ul me-1 text-primary"></i> Servidores Cadastrados
+      </div>
+      <div class="card-body p-0">
+        {% if users %}
+        <table class="table table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Nome</th>
+              <th class="text-end">Atribuídos</th>
+              <th class="text-end">Concluídos</th>
+              <th class="text-center">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for u in users %}
+            {% set prog = users_progress.get(u.id, {}) %}
+            <tr>
+              <td class="fw-semibold">
+                <i class="bi bi-person-circle text-muted me-1"></i>{{ u.name }}
+              </td>
+              <td class="text-end">{{ prog.get('total', 0) }}</td>
+              <td class="text-end">
+                {% set rev = prog.get('reviewed', 0) %}
+                {% set tot = prog.get('total', 0) %}
+                {% if tot > 0 and rev == tot %}
+                  <span class="badge bg-success">{{ rev }} ✓</span>
+                {% else %}
+                  {{ rev }}
+                {% endif %}
+              </td>
+              <td class="text-center">
+                <a href="{{ url_for('admin_editar_usuario', user_id=u.id) }}"
+                   class="btn btn-outline-primary btn-sm">
+                  <i class="bi bi-key"></i> Senha
+                </a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="text-center text-muted py-4">
+          <i class="bi bi-people display-6"></i>
+          <p class="mt-2">Nenhum servidor cadastrado ainda.</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

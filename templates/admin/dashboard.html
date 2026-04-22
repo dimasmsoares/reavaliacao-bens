@@ -1,0 +1,120 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0 fw-bold"><i class="bi bi-speedometer2 me-2 text-primary"></i>Dashboard</h4>
+  <form method="post" action="{{ url_for('admin_export') }}"
+        onsubmit="return confirm('Gerar arquivos Excel com os valores preenchidos?')">
+    <button class="btn btn-success btn-sm">
+      <i class="bi bi-file-earmark-excel me-1"></i> Exportar Excel
+    </button>
+  </form>
+</div>
+
+{% set pct_global = (progress.reviewed / progress.total * 100) | round(1) if progress.total > 0 else 0 %}
+<div class="card mb-4 border-0 shadow-sm">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-baseline mb-1">
+      <span class="fw-semibold">Progresso geral</span>
+      <span class="text-muted small">{{ progress.reviewed | int }} / {{ progress.total | int }} bens
+        {% if progress.unassigned > 0 %}
+          &nbsp;·&nbsp; <span class="text-warning">{{ progress.unassigned | int }} não distribuídos</span>
+        {% endif %}
+      </span>
+    </div>
+    <div class="progress" style="height: 22px;">
+      <div class="progress-bar bg-success fw-semibold" style="width: {{ pct_global }}%">
+        {{ pct_global }}%
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <!-- Servidores -->
+  <div class="col-lg-6">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-header bg-white fw-semibold border-0 pb-0">
+        <i class="bi bi-people me-1 text-primary"></i> Servidores
+      </div>
+      <div class="card-body pt-2">
+        {% if users_progress %}
+          <table class="table table-sm table-hover mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Nome</th>
+                <th class="text-end">Atribuídos</th>
+                <th class="text-end">Concluídos</th>
+                <th style="width:35%">Progresso</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for u in users_progress %}
+              {% set pct = (u.reviewed / u.total * 100) | round(1) if u.total > 0 else 0 %}
+              <tr>
+                <td>{{ u.name }}</td>
+                <td class="text-end">{{ u.total }}</td>
+                <td class="text-end">{{ u.reviewed }}</td>
+                <td>
+                  <div class="progress" style="height:14px;">
+                    <div class="progress-bar {% if pct == 100 %}bg-success{% else %}bg-primary{% endif %}"
+                         style="width:{{ pct }}%" title="{{ pct }}%"></div>
+                  </div>
+                  <small class="text-muted">{{ pct }}%</small>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <p class="text-muted small mb-0">Nenhum servidor cadastrado ainda.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Por planilha -->
+  <div class="col-lg-6">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-header bg-white fw-semibold border-0 pb-0">
+        <i class="bi bi-table me-1 text-primary"></i> Por Planilha
+      </div>
+      <div class="card-body pt-2">
+        {% if planilha_progress %}
+          <table class="table table-sm table-hover mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Planilha</th>
+                <th class="text-end">Total</th>
+                <th class="text-end">Concluídos</th>
+                <th style="width:30%">Progresso</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for p in planilha_progress %}
+              {% set pct = (p.reviewed / p.total * 100) | round(1) if p.total > 0 else 0 %}
+              <tr>
+                <td class="text-truncate" style="max-width:200px"
+                    title="{{ p.planilha }}">{{ p.planilha | planilha_curta }}</td>
+                <td class="text-end">{{ p.total }}</td>
+                <td class="text-end">{{ p.reviewed }}</td>
+                <td>
+                  <div class="progress" style="height:14px;">
+                    <div class="progress-bar {% if pct == 100 %}bg-success{% else %}bg-info{% endif %}"
+                         style="width:{{ pct }}%"></div>
+                  </div>
+                  <small class="text-muted">{{ pct }}%</small>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <p class="text-muted small mb-0">Nenhum dado carregado ainda.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
