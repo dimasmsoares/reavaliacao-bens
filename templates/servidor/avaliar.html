@@ -86,13 +86,11 @@
           <div class="col-auto d-flex align-items-center gap-2">
             {% if review %}
               <span class="badge bg-success"><i class="bi bi-check-lg"></i> Avaliado</span>
-              <form method="post" action="{{ url_for('desfazer_avaliacao', asset_id=asset.id) }}"
-                    onsubmit="return confirm('Remover esta avaliação para refazê-la?')">
-                <button type="submit" class="btn btn-outline-warning btn-sm py-0 px-2"
-                        title="Refazer avaliação">
-                  <i class="bi bi-arrow-counterclockwise"></i> Refazer
-                </button>
-              </form>
+              <button type="button" class="btn btn-outline-warning btn-sm py-0 px-2"
+                      data-bs-toggle="modal" data-bs-target="#modal-refazer"
+                      title="Refazer avaliação">
+                <i class="bi bi-arrow-counterclockwise"></i> Refazer
+              </button>
             {% else %}
               <span class="badge bg-warning text-dark"><i class="bi bi-clock"></i> Pendente</span>
             {% endif %}
@@ -290,6 +288,62 @@
 
   </div>{# /conteúdo principal #}
 </div>{# /d-flex #}
+
+{% if review %}
+<div class="modal fade" id="modal-refazer" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title text-warning">
+          <i class="bi bi-arrow-counterclockwise me-1"></i>Refazer avaliação
+        </h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        {% if group_reviewed_count > 1 %}
+        <div class="alert alert-warning py-2 small mb-3">
+          <i class="bi bi-exclamation-triangle-fill me-1"></i>
+          Este bem faz parte de um grupo com <strong>{{ group_reviewed_count }} bens similares avaliados</strong>.
+          Escolha o que deseja desfazer:
+        </div>
+        <div class="d-grid gap-2">
+          <form method="post" action="{{ url_for('desfazer_avaliacao', asset_id=asset.id) }}">
+            <input type="hidden" name="cascade" value="0">
+            <button type="submit" class="btn btn-outline-warning w-100 text-start">
+              <i class="bi bi-file-earmark me-2"></i>Só este bem (NRP {{ asset.nrp }})
+            </button>
+          </form>
+          <form method="post" action="{{ url_for('desfazer_avaliacao', asset_id=asset.id) }}">
+            <input type="hidden" name="cascade" value="1">
+            <button type="submit" class="btn btn-warning w-100 text-start">
+              <i class="bi bi-files me-2"></i>Todos os {{ group_reviewed_count }} bens similares do grupo
+            </button>
+          </form>
+        </div>
+        {% else %}
+        <p class="small mb-0">Deseja remover a avaliação deste bem para refazê-la?</p>
+        {% endif %}
+      </div>
+      {% if group_reviewed_count <= 1 %}
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+        <form method="post" action="{{ url_for('desfazer_avaliacao', asset_id=asset.id) }}">
+          <input type="hidden" name="cascade" value="0">
+          <button type="submit" class="btn btn-warning btn-sm">
+            <i class="bi bi-arrow-counterclockwise me-1"></i>Refazer
+          </button>
+        </form>
+      </div>
+      {% else %}
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {% endif %}
 {% endblock %}
 

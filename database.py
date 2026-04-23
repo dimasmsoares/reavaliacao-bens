@@ -431,6 +431,27 @@ def get_review(asset_id):
     return d
 
 
+def get_group_reviewed_count(asset_id, user_id):
+    """Retorna quantas avaliações existem no mesmo grupo atribuídas ao servidor."""
+    conn = get_db()
+    fields = conn.execute(
+        "SELECT material, marca, modelo, tipo FROM assets WHERE id = ?", (asset_id,)
+    ).fetchone()
+    if not fields or not fields['material'] or not fields['marca'] or not fields['modelo']:
+        conn.close()
+        return 1
+    row = conn.execute("""
+        SELECT COUNT(*) as cnt FROM reviews r
+        JOIN assets a ON r.asset_id = a.id
+        JOIN assignments asg ON a.id = asg.asset_id
+        WHERE a.material = ? AND a.marca = ? AND a.modelo = ?
+          AND COALESCE(a.tipo, '') = COALESCE(?, '')
+          AND asg.user_id = ?
+    """, (fields['material'], fields['marca'], fields['modelo'], fields['tipo'], user_id)).fetchone()
+    conn.close()
+    return row['cnt'] if row else 1
+
+
 def delete_review(asset_id, user_id):
     """Remove a avaliação deste bem e de todos os do mesmo grupo (mesmo tipo) atribuídos ao mesmo servidor."""
     conn = get_db()
@@ -454,6 +475,14 @@ def delete_review(asset_id, user_id):
     conn.close()
 
 
+def delete_review_single(asset_id):
+    """Remove apenas a avaliação deste bem, sem cascata para similares."""
+    conn = get_db()
+    conn.execute("DELETE FROM reviews WHERE asset_id = ?", (asset_id,))
+    conn.commit()
+    conn.close()
+
+
 def delete_user(user_id):
     """Remove o servidor: preserva reviews (user_id → NULL), libera assignments, apaga o user."""
     conn = get_db()
@@ -473,6 +502,36 @@ def admin_delete_review(asset_id, admin_id, target_user_id, justificativa):
         INSERT INTO audit_log (action, asset_id, admin_id, target_user_id, justificativa, created_at)
         VALUES ('undo_review', ?, ?, ?, ?, ?)
     """, (asset_id, admin_id, target_user_id, justificativa, now))
+    conn.commit()
+    conn.close()
+
+
+def admin_delete_review_group(asset_id, admin_id, target_user_id, justificativa):
+    """Admin remove todas as avaliações do grupo do servidor e registra cada remoção no audit_log."""
+    now = datetime.utcnow().isoformat()
+    conn = get_db()
+    fields = conn.execute(
+        "SELECT material, marca, modelo, tipo FROM assets WHERE id = ?", (asset_id,)
+    ).fetchone()
+    if fields and fields['material'] and fields['marca'] and fields['modelo']:
+        group_ids = conn.execute("""
+            SELECT a.id FROM assets a
+            JOIN assignments asg ON a.id = asg.asset_id
+            JOIN reviews r ON a.id = r.asset_id
+            WHERE a.material = ? AND a.marca = ? AND a.modelo = ?
+              AND COALESCE(a.tipo, '') = COALESCE(?, '')
+              AND asg.user_id = ?
+        """, (fields['material'], fields['marca'], fields['modelo'],
+              fields['tipo'], target_user_id)).fetchall()
+        ids = [row['id'] for row in group_ids]
+    else:
+        ids = [asset_id]
+    for aid in ids:
+        conn.execute("DELETE FROM reviews WHERE asset_id = ?", (aid,))
+        conn.execute("""
+            INSERT INTO audit_log (action, asset_id, admin_id, target_user_id, justificativa, created_at)
+            VALUES ('undo_review', ?, ?, ?, ?, ?)
+        """, (aid, admin_id, target_user_id, justificativa, now))
     conn.commit()
     conn.close()
 

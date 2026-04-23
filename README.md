@@ -79,7 +79,9 @@ O **Dashboard** (`/admin`) exibe:
 
 #### 4. Ver Bens de um Servidor
 
-Na tela **Servidores**, clique em **Bens** para ver a lista completa de bens atribuídos a um servidor, com valor de mercado, metodologia utilizada, observação e data de avaliação. É possível desfazer avaliações individuais informando uma justificativa.
+Na tela **Servidores**, clique em **Bens** para ver a lista completa de bens atribuídos a um servidor, com valor de mercado, metodologia utilizada, observação e data de avaliação.
+
+Para desfazer uma avaliação, clique no botão de desfazer e informe a justificativa. Quando o bem pertence a um grupo com vários bens similares avaliados, o modal exibe um checkbox opcional **"Desfazer também para todos os bens similares do grupo"**, permitindo reverter o grupo inteiro de uma só vez. Todas as remoções são registradas no `audit_log`.
 
 #### 5. Exportar os Resultados
 
@@ -137,7 +139,7 @@ Atualiza o valor contábil do bem desde a data de tombamento até hoje usando o 
 
 - **Anterior**: volta ao bem anterior
 - **Pular**: avança para o próximo sem salvar
-- **Refazer**: remove a avaliação atual para que possa ser refeita
+- **Refazer**: abre um modal para desfazer a avaliação atual. Se o bem pertence a um grupo com múltiplos similares avaliados, o modal oferece a opção de desfazer só este bem ou todos os similares do grupo
 - A sidebar lista todos os bens com indicação visual de concluído (✓) ou pendente
 
 #### Alterar Senha

@@ -385,6 +385,7 @@ def _render_avaliar(asset_id, asset):
     assets_list = db.get_assets_for_user(session['user_id'])
 
     group_size = db.get_group_size(asset_id)
+    group_reviewed_count = db.get_group_reviewed_count(asset_id, session['user_id'])
 
     return render_template('servidor/avaliar.html',
                            asset=asset,
@@ -395,7 +396,8 @@ def _render_avaliar(asset_id, asset):
                            next_in_order_id=next_id,
                            next_pending_id=next_pending_id,
                            position=position,
-                           group_size=group_size)
+                           group_size=group_size,
+                           group_reviewed_count=group_reviewed_count)
 
 
 # ── Servidor — Desfazer avaliação ────────────────────────────────────────────
@@ -409,8 +411,13 @@ def desfazer_avaliacao(asset_id):
     if asset_id not in user_asset_ids:
         flash('Este bem não está atribuído a você.', 'danger')
         return redirect(url_for('avaliar'))
-    db.delete_review(asset_id, session['user_id'])
-    flash('Avaliação removida. Você pode refazê-la agora.', 'info')
+    cascade = request.form.get('cascade') == '1'
+    if cascade:
+        db.delete_review(asset_id, session['user_id'])
+        flash('Avaliações do grupo removidas. Você pode refazê-las agora.', 'info')
+    else:
+        db.delete_review_single(asset_id)
+        flash('Avaliação removida. Você pode refazê-la agora.', 'info')
     return redirect(url_for('avaliar_bem', asset_id=asset_id))
 
 
@@ -451,8 +458,13 @@ def admin_desfazer_avaliacao(asset_id):
         flash('A justificativa é obrigatória para desfazer uma avaliação.', 'warning')
         return redirect(request.referrer or url_for('admin_dashboard'))
     target_user_id = review.get('user_id')
-    db.admin_delete_review(asset_id, session['user_id'], target_user_id, justificativa)
-    flash(f'Avaliação do bem NRP {asset["nrp"]} desfeita. O servidor deverá reavaliá-lo.', 'success')
+    cascade = request.form.get('cascade') == '1'
+    if cascade:
+        db.admin_delete_review_group(asset_id, session['user_id'], target_user_id, justificativa)
+        flash(f'Avaliações do grupo do bem NRP {asset["nrp"]} desfeitas. O servidor deverá reavaliá-los.', 'success')
+    else:
+        db.admin_delete_review(asset_id, session['user_id'], target_user_id, justificativa)
+        flash(f'Avaliação do bem NRP {asset["nrp"]} desfeita. O servidor deverá reavaliá-lo.', 'success')
     return redirect(request.referrer or url_for('admin_dashboard'))
 
 
@@ -464,7 +476,12 @@ def admin_usuario_bens(user_id):
         flash('Servidor não encontrado.', 'danger')
         return redirect(url_for('admin_usuarios'))
     assets = db.get_assets_for_user(user_id)
-    return render_template('admin/usuario_bens.html', user=user, assets=assets)
+    group_reviewed_counts = {
+        a['id']: db.get_group_reviewed_count(a['id'], user_id)
+        for a in assets if a.get('reviewed_at')
+    }
+    return render_template('admin/usuario_bens.html', user=user, assets=assets,
+                           group_reviewed_counts=group_reviewed_counts)
 
 
 # ── Admin — Excluir servidor ─────────────────────────────────────────────────

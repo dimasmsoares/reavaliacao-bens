@@ -89,6 +89,7 @@
                 <i class="bi bi-arrow-counterclockwise"></i>
               </button>
               {# Modal de justificativa #}
+              {% set grp_cnt = group_reviewed_counts.get(a.id, 1) %}
               <div class="modal fade" id="modal-desfazer-{{ a.id }}" tabindex="-1">
                 <div class="modal-dialog">
                   <div class="modal-content">
@@ -107,6 +108,19 @@
                           {% if a.marca %} — {{ a.marca }} {{ a.modelo or '' }}{% endif %}<br>
                           <strong>Valor avaliado:</strong> {{ a.valor_mercado | brl }}
                         </p>
+                        {% if grp_cnt > 1 %}
+                        <div class="alert alert-warning py-2 small mb-3">
+                          <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                          Este bem faz parte de um grupo com <strong>{{ grp_cnt }} bens similares avaliados</strong>.
+                        </div>
+                        <div class="form-check mb-3">
+                          <input class="form-check-input" type="checkbox" name="cascade" value="1"
+                                 id="cascade-{{ a.id }}">
+                          <label class="form-check-label small" for="cascade-{{ a.id }}">
+                            Desfazer também para todos os <strong>{{ grp_cnt }} bens similares</strong> do grupo
+                          </label>
+                        </div>
+                        {% endif %}
                         <div class="mb-0">
                           <label class="form-label fw-semibold">
                             Justificativa <span class="text-danger">*</span>
