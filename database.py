@@ -1,5 +1,6 @@
 import sqlite3
 import os
+import json
 from datetime import datetime
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -55,6 +56,13 @@ def init_db():
         );
     """)
     conn.commit()
+    # Migração: adiciona colunas novas se ainda não existirem
+    for col, defn in [('prices', 'TEXT'), ('screenshot_paths', 'TEXT')]:
+        try:
+            conn.execute(f'ALTER TABLE reviews ADD COLUMN {col} {defn}')
+            conn.commit()
+        except Exception:
+            pass
     conn.close()
 
 
@@ -264,20 +272,57 @@ def get_adjacent_asset_ids(user_id, current_asset_id):
 
 # ── Reviews ────────────────────────────────────────────────────────────────
 
-def save_review(asset_id, user_id, valor_mercado, screenshot_path=None):
+def save_review(asset_id, user_id, valor_mercado, screenshot_path=None,
+                prices=None, screenshot_paths=None):
     now = datetime.utcnow().isoformat()
+    prices_json = json.dumps(prices) if prices else None
+    paths_json  = json.dumps(screenshot_paths) if screenshot_paths else None
     conn = get_db()
     conn.execute("""
-        INSERT INTO reviews (asset_id, user_id, valor_mercado, screenshot_path, updated_at)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO reviews
+            (asset_id, user_id, valor_mercado, screenshot_path, prices, screenshot_paths, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(asset_id) DO UPDATE SET
             valor_mercado   = excluded.valor_mercado,
             screenshot_path = excluded.screenshot_path,
+            prices          = excluded.prices,
+            screenshot_paths = excluded.screenshot_paths,
             user_id         = excluded.user_id,
             updated_at      = excluded.updated_at
-    """, (asset_id, user_id, valor_mercado, screenshot_path, now))
+    """, (asset_id, user_id, valor_mercado, screenshot_path, prices_json, paths_json, now))
+
+    fields = conn.execute(
+        "SELECT material, marca, modelo FROM assets WHERE id = ?", (asset_id,)
+    ).fetchone()
+    if fields and fields['material'] and fields['marca'] and fields['modelo']:
+        conn.execute("""
+            INSERT OR IGNORE INTO reviews
+                (asset_id, user_id, valor_mercado, screenshot_path, prices, screenshot_paths, updated_at)
+            SELECT a.id, ?, ?, ?, ?, ?, ?
+            FROM assets a
+            WHERE a.material = ? AND a.marca = ? AND a.modelo = ?
+              AND a.id != ?
+        """, (user_id, valor_mercado, screenshot_path, prices_json, paths_json, now,
+              fields['material'], fields['marca'], fields['modelo'], asset_id))
+
     conn.commit()
     conn.close()
+
+
+def get_group_size(asset_id):
+    conn = get_db()
+    fields = conn.execute(
+        "SELECT material, marca, modelo FROM assets WHERE id = ?", (asset_id,)
+    ).fetchone()
+    if not fields or not fields['material'] or not fields['marca'] or not fields['modelo']:
+        conn.close()
+        return 1
+    row = conn.execute("""
+        SELECT COUNT(*) as cnt FROM assets
+        WHERE material = ? AND marca = ? AND modelo = ?
+    """, (fields['material'], fields['marca'], fields['modelo'])).fetchone()
+    conn.close()
+    return row['cnt'] if row else 1
 
 
 def get_review(asset_id):
@@ -286,7 +331,18 @@ def get_review(asset_id):
         "SELECT * FROM reviews WHERE asset_id = ?", (asset_id,)
     ).fetchone()
     conn.close()
-    return _row_to_dict(row)
+    d = _row_to_dict(row)
+    if not d:
+        return d
+    d['prices'] = json.loads(d['prices']) if d.get('prices') else []
+    raw_paths = d.get('screenshot_paths')
+    if raw_paths:
+        d['screenshot_paths'] = json.loads(raw_paths)
+    elif d.get('screenshot_path'):
+        d['screenshot_paths'] = [d['screenshot_path']]
+    else:
+        d['screenshot_paths'] = []
+    return d
 
 
 # ── Progress ───────────────────────────────────────────────────────────────

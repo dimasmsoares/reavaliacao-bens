@@ -1,4 +1,6 @@
 import os
+import re
+import json
 import base64
 import functools
 from datetime import datetime
@@ -21,6 +23,13 @@ app.config['MAX_CONTENT_LENGTH'] = 20 * 1024 * 1024  # 20 MB
 
 
 # ── Filtros de template ──────────────────────────────────────────────────────
+
+@app.template_filter('strip_codigo')
+def strip_codigo_filter(material):
+    if not material:
+        return ''
+    return re.sub(r'\s*\(\d+\)\s*$', '', material).strip()
+
 
 @app.template_filter('brl')
 def brl_filter(value):
@@ -255,32 +264,45 @@ def avaliar_bem(asset_id):
         return redirect(url_for('avaliar'))
 
     if request.method == 'POST':
-        valor_str = request.form.get('valor_mercado', '').replace(',', '.').strip()
-        screenshot_data = request.form.get('screenshot_data', '').strip()
-
+        # Preços
         try:
-            valor = float(valor_str)
-            if valor < 0:
-                raise ValueError()
-        except ValueError:
-            flash('Informe um valor de mercado válido (ex: 1.500,00).', 'danger')
+            prices = [float(p) for p in json.loads(request.form.get('prices_json', '[]'))
+                      if str(p).strip()]
+        except Exception:
+            prices = []
+
+        if not prices:
+            flash('Adicione ao menos um preço encontrado.', 'danger')
             return _render_avaliar(asset_id, asset)
 
-        screenshot_path = None
-        if screenshot_data:
+        valor = sum(prices) / len(prices)
+
+        # Screenshots existentes a manter
+        try:
+            keep_paths = json.loads(request.form.get('existing_screenshots', '[]'))
+            if not isinstance(keep_paths, list):
+                keep_paths = []
+        except Exception:
+            keep_paths = []
+
+        # Novos screenshots enviados como screenshot_data_0, screenshot_data_1, ...
+        new_paths = []
+        idx = 0
+        while True:
+            data = request.form.get(f'screenshot_data_{idx}', '').strip()
+            if not data:
+                break
             try:
-                screenshot_path = _save_screenshot(asset_id, screenshot_data)
+                new_paths.append(_save_screenshot(asset_id, data, idx))
             except Exception as e:
-                flash(f'Erro ao salvar imagem: {e}', 'danger')
-                return _render_avaliar(asset_id, asset)
+                flash(f'Erro ao salvar imagem {idx + 1}: {e}', 'warning')
+            idx += 1
 
-        # Se não há nova imagem, preserva a anterior
-        if not screenshot_path:
-            existing = db.get_review(asset_id)
-            if existing:
-                screenshot_path = existing.get('screenshot_path')
-
-        db.save_review(asset_id, session['user_id'], valor, screenshot_path)
+        all_paths = keep_paths + new_paths
+        db.save_review(asset_id, session['user_id'], valor,
+                       screenshot_path=all_paths[0] if all_paths else None,
+                       prices=prices,
+                       screenshot_paths=all_paths if all_paths else None)
         flash('Avaliação salva!', 'success')
 
         next_asset = db.get_next_pending_asset(session['user_id'])
@@ -303,6 +325,8 @@ def _render_avaliar(asset_id, asset):
     # Sidebar: apenas IDs + status leve para não sobrecarregar
     assets_list = db.get_assets_for_user(session['user_id'])
 
+    group_size = db.get_group_size(asset_id)
+
     return render_template('servidor/avaliar.html',
                            asset=asset,
                            review=review,
@@ -311,7 +335,8 @@ def _render_avaliar(asset_id, asset):
                            prev_id=prev_id,
                            next_in_order_id=next_id,
                            next_pending_id=next_pending_id,
-                           position=position)
+                           position=position,
+                           group_size=group_size)
 
 
 # ── API ──────────────────────────────────────────────────────────────────────
@@ -330,7 +355,7 @@ def serve_screenshot(filename):
 
 # ── Utilitários ──────────────────────────────────────────────────────────────
 
-def _save_screenshot(asset_id, data_url):
+def _save_screenshot(asset_id, data_url, idx=0):
     os.makedirs(SCREENSHOTS_DIR, exist_ok=True)
     if ',' in data_url:
         data_url = data_url.split(',', 1)[1]
@@ -338,8 +363,8 @@ def _save_screenshot(asset_id, data_url):
     img = Image.open(io.BytesIO(image_bytes))
     img = img.convert('RGB')
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    filename = f"{asset_id}_{timestamp}.png"
-    img.save(os.path.join(SCREENSHOTS_DIR, filename), 'PNG', optimize=True)
+    filename = f"{asset_id}_{timestamp}_{idx}.jpg"
+    img.save(os.path.join(SCREENSHOTS_DIR, filename), 'JPEG', quality=90, optimize=True)
     return filename
 
 

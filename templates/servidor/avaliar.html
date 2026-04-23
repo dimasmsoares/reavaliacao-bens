@@ -72,7 +72,8 @@
           </div>
           <div class="col">
             <span class="fw-bold fs-5">
-              {{ asset.marca or '—' }}
+              {{ asset.material | strip_codigo }}
+              {% if asset.marca %} - {{ asset.marca }}{% endif %}
               {% if asset.modelo %} {{ asset.modelo }}{% endif %}
             </span>
           </div>
@@ -94,8 +95,18 @@
       </div>
     </div>
 
+    {# Aviso de grupo #}
+    {% if group_size > 1 %}
+    <div class="alert alert-info py-2 mb-3">
+      <i class="bi bi-layers-fill me-1"></i>
+      Este bem pertence a um grupo de <strong>{{ group_size }}</strong> bens com o mesmo
+      material, marca e modelo. Ao salvar esta avaliação, os demais
+      <strong>{{ group_size - 1 }}</strong> serão avaliados automaticamente.
+    </div>
+    {% endif %}
+
     {# Botões de pesquisa #}
-    {% set query = ((asset.marca or '') + ' ' + (asset.modelo or '')) | urlencode %}
+    {% set query = ((asset.material | strip_codigo) + ((' - ' + asset.marca) if asset.marca else '') + ((' ' + asset.modelo) if asset.modelo else '')) | urlencode %}
     <div class="d-flex flex-wrap gap-2 mb-3">
       <a href="https://lista.mercadolivre.com.br/{{ query }}"
          target="_blank" class="btn btn-outline-warning btn-sm fw-semibold">
@@ -117,50 +128,44 @@
 
     {# Formulário de avaliação #}
     <form method="post" id="form-avaliar">
-      <input type="hidden" name="screenshot_data" id="screenshot_data">
+      <input type="hidden" name="prices_json"          id="prices_json"          value="[]">
+      <input type="hidden" name="existing_screenshots" id="existing_screenshots" value="[]">
 
       <div class="row g-3">
-        <div class="col-md-4">
-          <label class="form-label fw-semibold">Valor de Mercado (R$)</label>
-          <div class="input-group">
-            <span class="input-group-text">R$</span>
-            <input type="text" name="valor_mercado" id="valor_mercado"
-                   class="form-control form-control-lg"
-                   value="{{ '%.2f' | format(review.valor_mercado) | replace('.', ',') if review else '' }}"
-                   placeholder="0,00" required autocomplete="off">
-          </div>
-          <div class="form-text">Use vírgula como separador decimal. Ex: 1.500,00</div>
-        </div>
 
-        <div class="col-md-8">
-          <label class="form-label fw-semibold">
-            Print da pesquisa
-            <span class="text-muted fw-normal small">(arraste, cole Ctrl+V ou clique)</span>
-          </label>
-
-          <div id="drop-zone" class="drop-zone mb-2 {% if review and review.screenshot_path %}drop-zone-filled{% endif %}">
-            <div id="drop-placeholder" class="{% if review and review.screenshot_path %}d-none{% endif %}">
-              <i class="bi bi-image display-6 text-muted"></i>
-              <p class="mt-1 mb-0 text-muted small">Arraste a imagem aqui, pressione <kbd>Ctrl+V</kbd> ou clique para selecionar</p>
+        {# ── Preços ── #}
+        <div class="col-lg-5">
+          <label class="form-label fw-semibold">Preços encontrados</label>
+          <div class="d-flex gap-2 mb-2">
+            <div class="input-group">
+              <span class="input-group-text">R$</span>
+              <input type="text" id="price-input" class="form-control"
+                     placeholder="0,00" autocomplete="off">
             </div>
-            {% if review and review.screenshot_path %}
-            <img id="screenshot-preview"
-                 src="{{ url_for('serve_screenshot', filename=review.screenshot_path) }}"
-                 class="screenshot-preview" alt="Screenshot">
-            {% else %}
-            <img id="screenshot-preview" src="" class="screenshot-preview d-none" alt="Screenshot">
-            {% endif %}
-            <input type="file" id="file-input" accept="image/*" class="d-none">
-          </div>
-
-          {% if review and review.screenshot_path %}
-          <div class="d-flex align-items-center gap-2">
-            <span class="text-success small"><i class="bi bi-check-circle"></i> Imagem atual</span>
-            <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-clear-img">
-              <i class="bi bi-x"></i> Trocar imagem
+            <button type="button" class="btn btn-outline-primary flex-shrink-0" id="btn-add-price"
+                    title="Adicionar preço (Enter)">
+              <i class="bi bi-plus-lg"></i>
             </button>
           </div>
-          {% endif %}
+          <div id="prices-list" class="d-flex flex-wrap gap-2 mb-3" style="min-height:2rem"></div>
+          <div class="d-flex align-items-center gap-2 border-top pt-2">
+            <span class="text-muted small">Média (Valor de Mercado):</span>
+            <span class="fw-bold fs-5 text-success" id="avg-display">—</span>
+          </div>
+        </div>
+
+        {# ── Prints ── #}
+        <div class="col-lg-7">
+          <label class="form-label fw-semibold">
+            Prints da pesquisa
+            <span class="text-muted fw-normal small">(arraste, cole Ctrl+V ou clique)</span>
+          </label>
+          <div id="screenshots-grid" class="d-flex flex-wrap gap-2 mb-2"></div>
+          <div id="drop-zone" class="drop-zone drop-zone-compact">
+            <i class="bi bi-plus-circle fs-4 text-muted"></i>
+            <p class="mb-0 mt-1 text-muted small">Adicionar print</p>
+            <input type="file" id="file-input" accept="image/*" class="d-none">
+          </div>
         </div>
       </div>
 
@@ -201,10 +206,14 @@
 {% block scripts %}
 <script src="{{ url_for('static', filename='app.js') }}"></script>
 <script>
-  // Scrola a sidebar até o item ativo
   const activeItem = document.getElementById('item-{{ asset.id if asset else "" }}');
-  if (activeItem) {
-    activeItem.scrollIntoView({ block: 'center', behavior: 'smooth' });
-  }
+  if (activeItem) activeItem.scrollIntoView({ block: 'center', behavior: 'smooth' });
+
+  {% if asset %}
+  initAvaliar(
+    {{ (review.prices if review and review.prices else []) | tojson }},
+    {{ (review.screenshot_paths if review and review.screenshot_paths else []) | tojson }}
+  );
+  {% endif %}
 </script>
 {% endblock %}

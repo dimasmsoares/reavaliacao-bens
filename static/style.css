@@ -68,6 +68,11 @@
   object-fit: contain;
 }
 
+.drop-zone-compact {
+  min-height: 70px;
+  padding: 12px;
+}
+
 /* ── Misc ─────────────────────────────────────────────────────────── */
 .overflow-y-auto {
   overflow-y: auto;
