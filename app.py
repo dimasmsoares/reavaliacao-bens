@@ -289,7 +289,18 @@ def avaliar_bem(asset_id):
             flash('Adicione ao menos um preço encontrado.', 'danger')
             return _render_avaliar(asset_id, asset)
 
-        valor = sum(prices) / len(prices)
+        # Valor de mercado: usa o campo editável; fallback para a média dos preços
+        manual_str = request.form.get('valor_mercado_manual', '').strip()
+        if manual_str:
+            try:
+                valor = float(manual_str.replace('.', '').replace(',', '.'))
+                if valor <= 0:
+                    raise ValueError
+            except ValueError:
+                flash('Valor de mercado inválido.', 'danger')
+                return _render_avaliar(asset_id, asset)
+        else:
+            valor = sum(prices) / len(prices)
 
         # Screenshots existentes a manter
         try:

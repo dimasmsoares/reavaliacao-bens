@@ -161,9 +161,25 @@
             </button>
           </div>
           <div id="prices-list" class="d-flex flex-wrap gap-2 mb-3" style="min-height:2rem"></div>
-          <div class="d-flex align-items-center gap-2 border-top pt-2">
-            <span class="text-muted small">Média (Valor de Mercado):</span>
-            <span class="fw-bold fs-5 text-success" id="avg-display">—</span>
+          <div class="border-top pt-2">
+            <label class="form-label small text-muted mb-1">
+              Valor de Mercado
+              <span class="text-muted fw-normal">(média calculada; editável)</span>
+            </label>
+            <div class="input-group">
+              <span class="input-group-text fw-semibold">R$</span>
+              <input type="text" id="avg-input" name="valor_mercado_manual"
+                     class="form-control fw-bold fs-5 text-success"
+                     placeholder="0,00" autocomplete="off">
+              <button type="button" class="btn btn-outline-secondary" id="btn-reset-avg"
+                      title="Recalcular pela média dos preços">
+                <i class="bi bi-arrow-counterclockwise"></i>
+              </button>
+            </div>
+            <div id="avg-diff-warn" class="form-text text-warning d-none">
+              <i class="bi bi-exclamation-triangle-fill me-1"></i>
+              Valor editado manualmente — difere da média calculada.
+            </div>
           </div>
         </div>
 
@@ -234,7 +250,8 @@
   {% if asset %}
   initAvaliar(
     {{ (review.prices if review and review.prices else []) | tojson }},
-    {{ (review.screenshot_paths if review and review.screenshot_paths else []) | tojson }}
+    {{ (review.screenshot_paths if review and review.screenshot_paths else []) | tojson }},
+    {{ review.valor_mercado | tojson if review else 'null' }}
   );
   {% endif %}
 </script>

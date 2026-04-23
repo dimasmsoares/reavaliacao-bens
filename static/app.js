@@ -13,7 +13,9 @@
   const priceInput  = document.getElementById('price-input');
   const btnAddPrice = document.getElementById('btn-add-price');
   const pricesList  = document.getElementById('prices-list');
-  const avgDisplay  = document.getElementById('avg-display');
+  const avgInput    = document.getElementById('avg-input');
+  const avgDiffWarn = document.getElementById('avg-diff-warn');
+  const btnResetAvg = document.getElementById('btn-reset-avg');
   const pricesJson  = document.getElementById('prices_json');
   const existingJson= document.getElementById('existing_screenshots');
   const dropZone    = document.getElementById('drop-zone');
@@ -29,6 +31,53 @@
     return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
+  // ── Valor de mercado (editável) ──────────────────────────────────────────
+  let calcAvg = null;  // média calculada pelos preços
+
+  function calcAvgFromPrices() {
+    return prices.length ? prices.reduce((a, b) => a + b, 0) / prices.length : null;
+  }
+
+  function updateAvgInput(forceCalc) {
+    calcAvg = calcAvgFromPrices();
+    if (forceCalc || avgInput.dataset.manual !== '1') {
+      avgInput.value = calcAvg !== null ? formatBRL(calcAvg) : '';
+      avgInput.dataset.manual = '0';
+    }
+    checkAvgDiff();
+  }
+
+  function checkAvgDiff() {
+    if (!avgDiffWarn) return;
+    if (calcAvg === null || avgInput.dataset.manual !== '1') {
+      avgDiffWarn.classList.add('d-none');
+      return;
+    }
+    const cur = parseBRL(avgInput.value);
+    const differs = !isNaN(cur) && Math.abs(cur - calcAvg) > 0.01;
+    avgDiffWarn.classList.toggle('d-none', !differs);
+  }
+
+  if (avgInput) {
+    avgInput.addEventListener('input', function () {
+      this.dataset.manual = '1';
+      checkAvgDiff();
+    });
+    avgInput.addEventListener('blur', function () {
+      const n = parseBRL(this.value.trim());
+      if (!isNaN(n) && n > 0) this.value = formatBRL(n);
+    });
+  }
+
+  if (btnResetAvg) {
+    btnResetAvg.addEventListener('click', function () {
+      if (avgInput) {
+        avgInput.dataset.manual = '0';
+        updateAvgInput(true);
+      }
+    });
+  }
+
   // ── Preços ───────────────────────────────────────────────────────────────
   function renderPrices() {
     pricesJson.value = JSON.stringify(prices);
@@ -41,8 +90,7 @@
       </span>`
     ).join('');
 
-    const avg = prices.length ? prices.reduce((a, b) => a + b, 0) / prices.length : null;
-    avgDisplay.textContent = avg !== null ? 'R$ ' + formatBRL(avg) : '—';
+    updateAvgInput(false);
   }
 
   pricesList.addEventListener('click', function (e) {
@@ -153,6 +201,14 @@
       priceInput.focus();
       return;
     }
+    const valStr = avgInput ? avgInput.value.trim() : '';
+    const valNum = parseBRL(valStr);
+    if (!valStr || isNaN(valNum) || valNum <= 0) {
+      e.preventDefault();
+      if (avgInput) { avgInput.classList.add('is-invalid'); avgInput.focus(); }
+      return;
+    }
+    if (avgInput) avgInput.classList.remove('is-invalid');
     if (screenshots.length === 0) {
       if (!confirm('Nenhum print de comprovante foi anexado.\nDeseja salvar assim mesmo?')) {
         e.preventDefault();
@@ -180,9 +236,20 @@
   if (sidebarOnlyPending) sidebarOnlyPending.addEventListener('change', filterSidebar);
 
   // ── Inicialização com dados do servidor ─────────────────────────────────
-  window.initAvaliar = function (existingPrices, existingPaths) {
+  window.initAvaliar = function (existingPrices, existingPaths, existingValorMercado) {
     prices = (existingPrices || []).map(Number).filter(n => !isNaN(n));
-    renderPrices();
+    renderPrices();  // calcula média e preenche avg-input
+
+    // Se o valor salvo difere da média calculada, é uma edição manual anterior
+    if (existingValorMercado !== null && existingValorMercado !== undefined && avgInput) {
+      const calculado = calcAvgFromPrices();
+      if (calculado === null || Math.abs(existingValorMercado - calculado) > 0.01) {
+        avgInput.value = formatBRL(existingValorMercado);
+        avgInput.dataset.manual = '1';
+        checkAvgDiff();
+      }
+    }
+
     (existingPaths || []).forEach(path => {
       screenshots.push({ id: ++ssIdx, type: 'existing', path });
     });
