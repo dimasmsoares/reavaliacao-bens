@@ -160,6 +160,25 @@
     }
   });
 
+  // ── Filtro da sidebar ────────────────────────────────────────────────────
+  const sidebarSearch      = document.getElementById('sidebar-search');
+  const sidebarOnlyPending = document.getElementById('sidebar-only-pending');
+
+  function filterSidebar() {
+    const q       = sidebarSearch ? sidebarSearch.value.trim().toLowerCase() : '';
+    const pending = sidebarOnlyPending ? sidebarOnlyPending.checked : false;
+    document.querySelectorAll('.sidebar-item').forEach(function (el) {
+      const text     = el.textContent.toLowerCase();
+      const isDone   = el.classList.contains('sidebar-done');
+      const matchQ   = !q || text.includes(q);
+      const matchP   = !pending || !isDone;
+      el.style.display = (matchQ && matchP) ? '' : 'none';
+    });
+  }
+
+  if (sidebarSearch)      sidebarSearch.addEventListener('input', filterSidebar);
+  if (sidebarOnlyPending) sidebarOnlyPending.addEventListener('change', filterSidebar);
+
   // ── Inicialização com dados do servidor ─────────────────────────────────
   window.initAvaliar = function (existingPrices, existingPaths) {
     prices = (existingPrices || []).map(Number).filter(n => !isNaN(n));

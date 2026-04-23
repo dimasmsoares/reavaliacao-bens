@@ -57,7 +57,7 @@ def init_db():
     """)
     conn.commit()
     # Migração: adiciona colunas novas se ainda não existirem
-    for col, defn in [('prices', 'TEXT'), ('screenshot_paths', 'TEXT')]:
+    for col, defn in [('prices', 'TEXT'), ('screenshot_paths', 'TEXT'), ('observacao', 'TEXT')]:
         try:
             conn.execute(f'ALTER TABLE reviews ADD COLUMN {col} {defn}')
             conn.commit()
@@ -224,7 +224,7 @@ def reassign_pending(from_user_id, to_user_id):
 def get_assets_for_user(user_id):
     conn = get_db()
     rows = conn.execute("""
-        SELECT a.*, r.valor_mercado, r.screenshot_path, r.updated_at AS reviewed_at
+        SELECT a.*, r.valor_mercado, r.screenshot_path, r.observacao, r.updated_at AS reviewed_at
         FROM assets a
         JOIN assignments asg ON a.id = asg.asset_id
         LEFT JOIN reviews r ON a.id = r.asset_id
@@ -273,23 +273,24 @@ def get_adjacent_asset_ids(user_id, current_asset_id):
 # ── Reviews ────────────────────────────────────────────────────────────────
 
 def save_review(asset_id, user_id, valor_mercado, screenshot_path=None,
-                prices=None, screenshot_paths=None):
+                prices=None, screenshot_paths=None, observacao=None):
     now = datetime.utcnow().isoformat()
     prices_json = json.dumps(prices) if prices else None
     paths_json  = json.dumps(screenshot_paths) if screenshot_paths else None
     conn = get_db()
     conn.execute("""
         INSERT INTO reviews
-            (asset_id, user_id, valor_mercado, screenshot_path, prices, screenshot_paths, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+            (asset_id, user_id, valor_mercado, screenshot_path, prices, screenshot_paths, observacao, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(asset_id) DO UPDATE SET
-            valor_mercado   = excluded.valor_mercado,
-            screenshot_path = excluded.screenshot_path,
-            prices          = excluded.prices,
+            valor_mercado    = excluded.valor_mercado,
+            screenshot_path  = excluded.screenshot_path,
+            prices           = excluded.prices,
             screenshot_paths = excluded.screenshot_paths,
-            user_id         = excluded.user_id,
-            updated_at      = excluded.updated_at
-    """, (asset_id, user_id, valor_mercado, screenshot_path, prices_json, paths_json, now))
+            observacao       = excluded.observacao,
+            user_id          = excluded.user_id,
+            updated_at       = excluded.updated_at
+    """, (asset_id, user_id, valor_mercado, screenshot_path, prices_json, paths_json, observacao, now))
 
     fields = conn.execute(
         "SELECT material, marca, modelo FROM assets WHERE id = ?", (asset_id,)
@@ -297,12 +298,12 @@ def save_review(asset_id, user_id, valor_mercado, screenshot_path=None,
     if fields and fields['material'] and fields['marca'] and fields['modelo']:
         conn.execute("""
             INSERT OR IGNORE INTO reviews
-                (asset_id, user_id, valor_mercado, screenshot_path, prices, screenshot_paths, updated_at)
-            SELECT a.id, ?, ?, ?, ?, ?, ?
+                (asset_id, user_id, valor_mercado, screenshot_path, prices, screenshot_paths, observacao, updated_at)
+            SELECT a.id, ?, ?, ?, ?, ?, ?, ?
             FROM assets a
             WHERE a.material = ? AND a.marca = ? AND a.modelo = ?
               AND a.id != ?
-        """, (user_id, valor_mercado, screenshot_path, prices_json, paths_json, now,
+        """, (user_id, valor_mercado, screenshot_path, prices_json, paths_json, observacao, now,
               fields['material'], fields['marca'], fields['modelo'], asset_id))
 
     conn.commit()
@@ -343,6 +344,38 @@ def get_review(asset_id):
     else:
         d['screenshot_paths'] = []
     return d
+
+
+def delete_review(asset_id, user_id):
+    """Remove a avaliação deste bem e de todos os do mesmo grupo atribuídos ao mesmo servidor."""
+    conn = get_db()
+    fields = conn.execute(
+        "SELECT material, marca, modelo FROM assets WHERE id = ?", (asset_id,)
+    ).fetchone()
+    if fields and fields['material'] and fields['marca'] and fields['modelo']:
+        conn.execute("""
+            DELETE FROM reviews
+            WHERE asset_id IN (
+                SELECT a.id FROM assets a
+                JOIN assignments asg ON a.id = asg.asset_id
+                WHERE a.material = ? AND a.marca = ? AND a.modelo = ?
+                  AND asg.user_id = ?
+            )
+        """, (fields['material'], fields['marca'], fields['modelo'], user_id))
+    else:
+        conn.execute("DELETE FROM reviews WHERE asset_id = ?", (asset_id,))
+    conn.commit()
+    conn.close()
+
+
+def delete_user(user_id):
+    """Remove o servidor: preserva reviews (user_id → NULL), libera assignments, apaga o user."""
+    conn = get_db()
+    conn.execute("UPDATE reviews SET user_id = NULL WHERE user_id = ?", (user_id,))
+    conn.execute("DELETE FROM assignments WHERE user_id = ?", (user_id,))
+    conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    conn.commit()
+    conn.close()
 
 
 # ── Progress ───────────────────────────────────────────────────────────────

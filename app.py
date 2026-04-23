@@ -299,10 +299,12 @@ def avaliar_bem(asset_id):
             idx += 1
 
         all_paths = keep_paths + new_paths
+        observacao = request.form.get('observacao', '').strip() or None
         db.save_review(asset_id, session['user_id'], valor,
                        screenshot_path=all_paths[0] if all_paths else None,
                        prices=prices,
-                       screenshot_paths=all_paths if all_paths else None)
+                       screenshot_paths=all_paths if all_paths else None,
+                       observacao=observacao)
         flash('Avaliação salva!', 'success')
 
         next_asset = db.get_next_pending_asset(session['user_id'])
@@ -337,6 +339,71 @@ def _render_avaliar(asset_id, asset):
                            next_pending_id=next_pending_id,
                            position=position,
                            group_size=group_size)
+
+
+# ── Servidor — Desfazer avaliação ────────────────────────────────────────────
+
+@app.route('/avaliar/<int:asset_id>/desfazer', methods=['POST'])
+@login_required
+def desfazer_avaliacao(asset_id):
+    if session.get('role') == 'admin':
+        return redirect(url_for('admin_dashboard'))
+    user_asset_ids = {a['id'] for a in db.get_assets_for_user(session['user_id'])}
+    if asset_id not in user_asset_ids:
+        flash('Este bem não está atribuído a você.', 'danger')
+        return redirect(url_for('avaliar'))
+    db.delete_review(asset_id, session['user_id'])
+    flash('Avaliação removida. Você pode refazê-la agora.', 'info')
+    return redirect(url_for('avaliar_bem', asset_id=asset_id))
+
+
+# ── Servidor — Alterar senha ─────────────────────────────────────────────────
+
+@app.route('/minha_senha', methods=['GET', 'POST'])
+@login_required
+def minha_senha():
+    if request.method == 'POST':
+        nova = request.form.get('password', '')
+        confirma = request.form.get('confirm', '')
+        if len(nova) < 4:
+            flash('A senha deve ter pelo menos 4 caracteres.', 'warning')
+        elif nova != confirma:
+            flash('As senhas não coincidem.', 'warning')
+        else:
+            db.update_user_password(session['user_id'], generate_password_hash(nova))
+            flash('Senha alterada com sucesso!', 'success')
+            return redirect(url_for('index'))
+    return render_template('servidor/minha_senha.html')
+
+
+# ── Admin — Bens de um servidor ──────────────────────────────────────────────
+
+@app.route('/admin/usuarios/<int:user_id>/bens')
+@admin_required
+def admin_usuario_bens(user_id):
+    user = db.get_user_by_id(user_id)
+    if not user or user['role'] != 'servidor':
+        flash('Servidor não encontrado.', 'danger')
+        return redirect(url_for('admin_usuarios'))
+    assets = db.get_assets_for_user(user_id)
+    return render_template('admin/usuario_bens.html', user=user, assets=assets)
+
+
+# ── Admin — Excluir servidor ─────────────────────────────────────────────────
+
+@app.route('/admin/usuarios/<int:user_id>/excluir', methods=['POST'])
+@admin_required
+def admin_excluir_usuario(user_id):
+    if user_id == session['user_id']:
+        flash('Você não pode excluir sua própria conta.', 'danger')
+        return redirect(url_for('admin_usuarios'))
+    user = db.get_user_by_id(user_id)
+    if not user or user['role'] != 'servidor':
+        flash('Servidor não encontrado.', 'danger')
+        return redirect(url_for('admin_usuarios'))
+    db.delete_user(user_id)
+    flash(f'Servidor "{user["name"]}" excluído. Os bens foram liberados para redistribuição.', 'success')
+    return redirect(url_for('admin_usuarios'))
 
 
 # ── API ──────────────────────────────────────────────────────────────────────

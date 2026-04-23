@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% block title %}Alterar Senha{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center mt-4">
+  <div class="col-sm-8 col-md-5 col-lg-4">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white fw-semibold border-0">
+        <i class="bi bi-key me-1 text-primary"></i> Alterar Senha
+      </div>
+      <div class="card-body">
+        <p class="text-muted small mb-3">Usuário: <strong>{{ session.user_name }}</strong></p>
+        <form method="post">
+          <div class="mb-3">
+            <label class="form-label">Nova senha</label>
+            <input type="password" name="password" class="form-control" required
+                   minlength="4" placeholder="Mínimo 4 caracteres" autofocus>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Confirmar nova senha</label>
+            <input type="password" name="confirm" class="form-control" required
+                   placeholder="Repita a nova senha">
+          </div>
+          <div class="d-flex gap-2">
+            <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">Cancelar</a>
+            <button type="submit" class="btn btn-primary ms-auto">
+              <i class="bi bi-check-lg me-1"></i> Salvar
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

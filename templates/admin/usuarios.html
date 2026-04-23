@@ -72,10 +72,54 @@
                 {% endif %}
               </td>
               <td class="text-center">
-                <a href="{{ url_for('admin_editar_usuario', user_id=u.id) }}"
-                   class="btn btn-outline-primary btn-sm">
-                  <i class="bi bi-key"></i> Senha
-                </a>
+                <div class="d-flex gap-1 justify-content-center flex-wrap">
+                  <a href="{{ url_for('admin_usuario_bens', user_id=u.id) }}"
+                     class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-list-ul"></i> Bens
+                  </a>
+                  <a href="{{ url_for('admin_editar_usuario', user_id=u.id) }}"
+                     class="btn btn-outline-primary btn-sm">
+                    <i class="bi bi-key"></i> Senha
+                  </a>
+                  <button type="button" class="btn btn-outline-danger btn-sm"
+                          data-bs-toggle="modal"
+                          data-bs-target="#modal-excluir-{{ u.id }}"
+                          data-user="{{ u.name }}"
+                          data-pending="{{ prog.get('total', 0) - prog.get('reviewed', 0) }}">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </div>
+                {# Modal de confirmação #}
+                <div class="modal fade" id="modal-excluir-{{ u.id }}" tabindex="-1">
+                  <div class="modal-dialog modal-sm">
+                    <div class="modal-content">
+                      <div class="modal-header">
+                        <h6 class="modal-title text-danger">
+                          <i class="bi bi-trash me-1"></i>Excluir servidor
+                        </h6>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                      </div>
+                      <div class="modal-body small">
+                        Excluir <strong>{{ u.name }}</strong>?
+                        {% set pendentes = prog.get('total', 0) - prog.get('reviewed', 0) %}
+                        {% if pendentes > 0 %}
+                        <div class="alert alert-warning py-1 mt-2 mb-0 small">
+                          <i class="bi bi-exclamation-triangle me-1"></i>
+                          {{ pendentes }} bem(ns) pendente(s) serão desatribuídos.
+                        </div>
+                        {% endif %}
+                      </div>
+                      <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary btn-sm"
+                                data-bs-dismiss="modal">Cancelar</button>
+                        <form method="post"
+                              action="{{ url_for('admin_excluir_usuario', user_id=u.id) }}">
+                          <button type="submit" class="btn btn-danger btn-sm">Excluir</button>
+                        </form>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </td>
             </tr>
             {% endfor %}

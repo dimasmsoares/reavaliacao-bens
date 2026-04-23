@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+{% block title %}Bens de {{ user.name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0 fw-bold">
+    <i class="bi bi-list-ul me-2 text-primary"></i>Bens de {{ user.name }}
+  </h4>
+  <a href="{{ url_for('admin_usuarios') }}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left"></i> Voltar
+  </a>
+</div>
+
+{% if assets %}
+{% set total = assets | length %}
+{% set avaliados = assets | selectattr('reviewed_at') | list | length %}
+{% set pct = (avaliados / total * 100) | round(1) if total > 0 else 0 %}
+
+<div class="card border-0 shadow-sm mb-3">
+  <div class="card-body py-2">
+    <div class="d-flex justify-content-between small mb-1">
+      <span>{{ avaliados }} avaliados de {{ total }} atribuídos</span>
+      <span class="text-muted">{{ pct }}%</span>
+    </div>
+    <div class="progress" style="height:10px;">
+      <div class="progress-bar {% if pct == 100 %}bg-success{% else %}bg-primary{% endif %}"
+           style="width:{{ pct }}%"></div>
+    </div>
+  </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>NRP</th>
+            <th>Material</th>
+            <th>Marca / Modelo</th>
+            <th>Planilha</th>
+            <th class="text-end">Valor de Mercado</th>
+            <th>Observação</th>
+            <th>Data</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in assets %}
+          <tr>
+            <td class="text-nowrap"><small>{{ a.nrp }}</small></td>
+            <td><small>{{ a.material | strip_codigo }}</small></td>
+            <td><small>{{ a.marca or '' }} {{ a.modelo or '' }}</small></td>
+            <td><small>{{ a.planilha | planilha_curta }}</small></td>
+            <td class="text-end text-nowrap">
+              {% if a.reviewed_at %}
+                <span class="fw-semibold text-success">{{ a.valor_mercado | brl }}</span>
+              {% else %}
+                <span class="text-muted small">Pendente</span>
+              {% endif %}
+            </td>
+            <td><small class="text-muted">{{ a.observacao or '' }}</small></td>
+            <td class="text-nowrap">
+              {% if a.reviewed_at %}
+                <small class="text-muted">{{ a.reviewed_at[:10] }}</small>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="text-center text-muted py-5">
+  <i class="bi bi-inbox display-4"></i>
+  <p class="mt-2">Nenhum bem atribuído a este servidor.</p>
+</div>
+{% endif %}
+{% endblock %}

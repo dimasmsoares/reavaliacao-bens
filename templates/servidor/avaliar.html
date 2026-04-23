@@ -28,8 +28,14 @@
         <span class="fw-semibold">{{ session.user_name }}</span>
         <span class="text-muted">{{ progress.reviewed }}/{{ progress.total }}</span>
       </div>
-      <div class="progress" style="height:8px;">
+      <div class="progress mb-2" style="height:8px;">
         <div class="progress-bar bg-success" style="width:{{ pct }}%"></div>
+      </div>
+      <input type="text" id="sidebar-search" class="form-control form-control-sm mb-1"
+             placeholder="Buscar NRP / marca…" autocomplete="off">
+      <div class="form-check form-switch mb-0">
+        <input class="form-check-input" type="checkbox" id="sidebar-only-pending">
+        <label class="form-check-label small text-muted" for="sidebar-only-pending">Só pendentes</label>
       </div>
     </div>
     <div class="flex-grow-1 overflow-y-auto sidebar-list">
@@ -77,9 +83,16 @@
               {% if asset.modelo %} {{ asset.modelo }}{% endif %}
             </span>
           </div>
-          <div class="col-auto">
+          <div class="col-auto d-flex align-items-center gap-2">
             {% if review %}
               <span class="badge bg-success"><i class="bi bi-check-lg"></i> Avaliado</span>
+              <form method="post" action="{{ url_for('desfazer_avaliacao', asset_id=asset.id) }}"
+                    onsubmit="return confirm('Remover esta avaliação para refazê-la?')">
+                <button type="submit" class="btn btn-outline-warning btn-sm py-0 px-2"
+                        title="Refazer avaliação">
+                  <i class="bi bi-arrow-counterclockwise"></i> Refazer
+                </button>
+              </form>
             {% else %}
               <span class="badge bg-warning text-dark"><i class="bi bi-clock"></i> Pendente</span>
             {% endif %}
@@ -167,6 +180,15 @@
             <input type="file" id="file-input" accept="image/*" class="d-none">
           </div>
         </div>
+      </div>
+
+      {# Observação #}
+      <div class="mt-3">
+        <label for="observacao" class="form-label fw-semibold">
+          Observação <span class="text-muted fw-normal small">(opcional)</span>
+        </label>
+        <textarea name="observacao" id="observacao" class="form-control" rows="2"
+                  placeholder="Ex: produto descontinuado, preços muito variáveis…">{{ review.observacao if review and review.observacao else '' }}</textarea>
       </div>
 
       {# Navegação #}
