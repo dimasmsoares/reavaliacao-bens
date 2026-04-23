@@ -54,6 +54,16 @@ def init_db():
             user_id         INTEGER REFERENCES users(id),
             updated_at      TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS audit_log (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            action         TEXT NOT NULL,
+            asset_id       INTEGER,
+            admin_id       INTEGER NOT NULL,
+            target_user_id INTEGER,
+            justificativa  TEXT,
+            created_at     TEXT NOT NULL
+        );
     """)
     conn.commit()
     # Migração: adiciona colunas novas se ainda não existirem
@@ -376,6 +386,55 @@ def delete_user(user_id):
     conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
     conn.commit()
     conn.close()
+
+
+def admin_delete_review(asset_id, admin_id, target_user_id, justificativa):
+    """Admin remove uma avaliação específica (sem cascata de grupo) e registra no audit_log."""
+    now = datetime.utcnow().isoformat()
+    conn = get_db()
+    conn.execute("DELETE FROM reviews WHERE asset_id = ?", (asset_id,))
+    conn.execute("""
+        INSERT INTO audit_log (action, asset_id, admin_id, target_user_id, justificativa, created_at)
+        VALUES ('undo_review', ?, ?, ?, ?, ?)
+    """, (asset_id, admin_id, target_user_id, justificativa, now))
+    conn.commit()
+    conn.close()
+
+
+def get_unique_count_by_planilha():
+    """Conta grupos únicos (material+marca+modelo) por planilha. Assets sem grupo completo contam 1 cada."""
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT planilha, COUNT(DISTINCT
+            CASE WHEN material IS NOT NULL AND marca IS NOT NULL AND modelo IS NOT NULL
+                 THEN material || '~~' || marca || '~~' || modelo
+                 ELSE CAST(id AS TEXT)
+            END) AS unicos
+        FROM assets
+        GROUP BY planilha
+        ORDER BY planilha
+    """).fetchall()
+    conn.close()
+    return {r['planilha']: r['unicos'] for r in rows}
+
+
+def get_unique_unassigned_by_planilha():
+    """Grupos únicos não distribuídos por planilha."""
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT a.planilha, COUNT(DISTINCT
+            CASE WHEN a.material IS NOT NULL AND a.marca IS NOT NULL AND a.modelo IS NOT NULL
+                 THEN a.material || '~~' || a.marca || '~~' || a.modelo
+                 ELSE CAST(a.id AS TEXT)
+            END) AS unicos
+        FROM assets a
+        LEFT JOIN assignments asg ON a.id = asg.asset_id
+        WHERE asg.asset_id IS NULL
+        GROUP BY a.planilha
+        ORDER BY a.planilha
+    """).fetchall()
+    conn.close()
+    return {r['planilha']: r['unicos'] for r in rows}
 
 
 # ── Progress ───────────────────────────────────────────────────────────────

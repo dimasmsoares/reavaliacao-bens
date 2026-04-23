@@ -17,7 +17,12 @@
   <i class="bi bi-exclamation-triangle me-1"></i>
   <strong>Bens não distribuídos:</strong>
   {% for u in unassigned %}
-    <span class="badge bg-secondary ms-1">{{ u.planilha | planilha_curta }}: {{ u.total }}</span>
+    {% set unicos = unique_unassigned.get(u.planilha, u.total) %}
+    <span class="badge bg-secondary ms-1"
+          title="{{ u.total }} bens · {{ unicos }} grupos únicos">
+      {{ u.planilha | planilha_curta }}: {{ u.total }}
+      <span class="opacity-75">({{ unicos }} únicos)</span>
+    </span>
   {% endfor %}
 </div>
 {% else %}

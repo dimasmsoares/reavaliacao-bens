@@ -42,6 +42,7 @@
             <th class="text-end">Valor de Mercado</th>
             <th>Observação</th>
             <th>Data</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
@@ -62,6 +63,55 @@
             <td class="text-nowrap">
               {% if a.reviewed_at %}
                 <small class="text-muted">{{ a.reviewed_at[:10] }}</small>
+              {% endif %}
+            </td>
+            <td>
+              {% if a.reviewed_at %}
+              <button type="button" class="btn btn-outline-danger btn-sm py-0 px-1"
+                      data-bs-toggle="modal"
+                      data-bs-target="#modal-desfazer-{{ a.id }}"
+                      title="Desfazer avaliação">
+                <i class="bi bi-arrow-counterclockwise"></i>
+              </button>
+              {# Modal de justificativa #}
+              <div class="modal fade" id="modal-desfazer-{{ a.id }}" tabindex="-1">
+                <div class="modal-dialog">
+                  <div class="modal-content">
+                    <div class="modal-header">
+                      <h6 class="modal-title text-danger">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i>Desfazer avaliação
+                      </h6>
+                      <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <form method="post"
+                          action="{{ url_for('admin_desfazer_avaliacao', asset_id=a.id) }}">
+                      <div class="modal-body">
+                        <p class="small mb-2">
+                          <strong>NRP:</strong> {{ a.nrp }}<br>
+                          <strong>Bem:</strong> {{ a.material | strip_codigo }}
+                          {% if a.marca %} — {{ a.marca }} {{ a.modelo or '' }}{% endif %}<br>
+                          <strong>Valor avaliado:</strong> {{ a.valor_mercado | brl }}
+                        </p>
+                        <div class="mb-0">
+                          <label class="form-label fw-semibold">
+                            Justificativa <span class="text-danger">*</span>
+                          </label>
+                          <textarea name="justificativa" class="form-control" rows="3"
+                                    required placeholder="Descreva o motivo para desfazer esta avaliação…"></textarea>
+                          <div class="form-text">Esta justificativa será registrada no log do sistema.</div>
+                        </div>
+                      </div>
+                      <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary btn-sm"
+                                data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-danger btn-sm">
+                          <i class="bi bi-arrow-counterclockwise me-1"></i>Desfazer
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              </div>
               {% endif %}
             </td>
           </tr>

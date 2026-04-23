@@ -112,10 +112,12 @@ def admin_dashboard():
     progress = db.get_global_progress()
     users_progress = db.get_all_users_progress()
     planilha_progress = db.get_progress_by_planilha()
+    unique_counts = db.get_unique_count_by_planilha()
     return render_template('admin/dashboard.html',
                            progress=progress,
                            users_progress=users_progress,
-                           planilha_progress=planilha_progress)
+                           planilha_progress=planilha_progress,
+                           unique_counts=unique_counts)
 
 
 @app.route('/admin/export', methods=['POST'])
@@ -216,11 +218,13 @@ def admin_distribuir():
     planilhas = db.get_distinct_planilhas()
     unassigned = db.get_unassigned_count_by_planilha()
     users_progress = db.get_all_users_progress()
+    unique_unassigned = db.get_unique_unassigned_by_planilha()
     return render_template('admin/distribuir.html',
                            users=users,
                            planilhas=planilhas,
                            unassigned=unassigned,
-                           users_progress=users_progress)
+                           users_progress=users_progress,
+                           unique_unassigned=unique_unassigned)
 
 
 # ── Servidor — Avaliação ─────────────────────────────────────────────────────
@@ -377,6 +381,27 @@ def minha_senha():
 
 
 # ── Admin — Bens de um servidor ──────────────────────────────────────────────
+
+@app.route('/admin/avaliacoes/<int:asset_id>/desfazer', methods=['POST'])
+@admin_required
+def admin_desfazer_avaliacao(asset_id):
+    asset = db.get_asset(asset_id)
+    if not asset:
+        flash('Bem não encontrado.', 'danger')
+        return redirect(url_for('admin_dashboard'))
+    review = db.get_review(asset_id)
+    if not review:
+        flash('Este bem não possui avaliação registrada.', 'warning')
+        return redirect(request.referrer or url_for('admin_dashboard'))
+    justificativa = request.form.get('justificativa', '').strip()
+    if not justificativa:
+        flash('A justificativa é obrigatória para desfazer uma avaliação.', 'warning')
+        return redirect(request.referrer or url_for('admin_dashboard'))
+    target_user_id = review.get('user_id')
+    db.admin_delete_review(asset_id, session['user_id'], target_user_id, justificativa)
+    flash(f'Avaliação do bem NRP {asset["nrp"]} desfeita. O servidor deverá reavaliá-lo.', 'success')
+    return redirect(request.referrer or url_for('admin_dashboard'))
+
 
 @app.route('/admin/usuarios/<int:user_id>/bens')
 @admin_required

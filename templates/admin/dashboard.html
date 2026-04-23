@@ -87,17 +87,20 @@
               <tr>
                 <th>Planilha</th>
                 <th class="text-end">Total</th>
+                <th class="text-end" title="Grupos únicos (mesmo material+marca+modelo conta como 1)">Únicos*</th>
                 <th class="text-end">Concluídos</th>
-                <th style="width:30%">Progresso</th>
+                <th style="width:28%">Progresso</th>
               </tr>
             </thead>
             <tbody>
               {% for p in planilha_progress %}
               {% set pct = (p.reviewed / p.total * 100) | round(1) if p.total > 0 else 0 %}
+              {% set unicos = unique_counts.get(p.planilha, p.total) %}
               <tr>
-                <td class="text-truncate" style="max-width:200px"
+                <td class="text-truncate" style="max-width:180px"
                     title="{{ p.planilha }}">{{ p.planilha | planilha_curta }}</td>
                 <td class="text-end">{{ p.total }}</td>
+                <td class="text-end fw-semibold text-primary">{{ unicos }}</td>
                 <td class="text-end">{{ p.reviewed }}</td>
                 <td>
                   <div class="progress" style="height:14px;">
@@ -110,6 +113,9 @@
               {% endfor %}
             </tbody>
           </table>
+          <p class="text-muted" style="font-size:.75rem; padding:.5rem .75rem 0">
+            * Bens com mesmo material, marca e modelo contam como 1 único — avaliar um propaga para todos os idênticos.
+          </p>
         {% else %}
           <p class="text-muted small mb-0">Nenhum dado carregado ainda.</p>
         {% endif %}
