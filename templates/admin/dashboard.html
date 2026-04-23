@@ -17,7 +17,11 @@
   <div class="card-body">
     <div class="d-flex justify-content-between align-items-baseline mb-1">
       <span class="fw-semibold">Progresso geral</span>
-      <span class="text-muted small">{{ progress.reviewed | int }} / {{ progress.total | int }} bens
+      <span class="text-muted small">
+        {{ progress.reviewed | int }} / {{ progress.total | int }} bens
+        &nbsp;·&nbsp;
+        <span title="Bens principais (tipo vazio)">{{ progress.principais | int }} principais</span>
+        + <span title="Agregações">{{ (progress.total - progress.principais) | int }} agr.</span>
         {% if progress.unassigned > 0 %}
           &nbsp;·&nbsp; <span class="text-warning">{{ progress.unassigned | int }} não distribuídos</span>
         {% endif %}
@@ -86,10 +90,12 @@
             <thead class="table-light">
               <tr>
                 <th>Planilha</th>
-                <th class="text-end">Total</th>
-                <th class="text-end" title="Grupos únicos (mesmo material+marca+modelo conta como 1)">Únicos*</th>
-                <th class="text-end">Concluídos</th>
-                <th style="width:28%">Progresso</th>
+                <th class="text-end" title="Total de registros (principais + agregações)">Total</th>
+                <th class="text-end" title="Bens principais (Tipo vazio)">Princ.</th>
+                <th class="text-end" title="Agregações ao bem principal">Agr.</th>
+                <th class="text-end" title="Grupos únicos por tipo+material+marca+modelo — avaliar 1 propaga para idênticos">Únicos*</th>
+                <th class="text-end">Avaliados</th>
+                <th style="width:22%">Progresso</th>
               </tr>
             </thead>
             <tbody>
@@ -97,9 +103,11 @@
               {% set pct = (p.reviewed / p.total * 100) | round(1) if p.total > 0 else 0 %}
               {% set unicos = unique_counts.get(p.planilha, p.total) %}
               <tr>
-                <td class="text-truncate" style="max-width:180px"
+                <td class="text-truncate" style="max-width:160px"
                     title="{{ p.planilha }}">{{ p.planilha | planilha_curta }}</td>
                 <td class="text-end">{{ p.total }}</td>
+                <td class="text-end text-secondary">{{ p.principais }}</td>
+                <td class="text-end text-secondary">{{ p.agregacoes }}</td>
                 <td class="text-end fw-semibold text-primary">{{ unicos }}</td>
                 <td class="text-end">{{ p.reviewed }}</td>
                 <td>
@@ -114,7 +122,7 @@
             </tbody>
           </table>
           <p class="text-muted" style="font-size:.75rem; padding:.5rem .75rem 0">
-            * Bens com mesmo material, marca e modelo contam como 1 único — avaliar um propaga para todos os idênticos.
+            * Grupos únicos por tipo + material + marca + modelo — avaliar 1 propaga para todos os idênticos do mesmo tipo.
           </p>
         {% else %}
           <p class="text-muted small mb-0">Nenhum dado carregado ainda.</p>

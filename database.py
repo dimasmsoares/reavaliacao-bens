@@ -303,7 +303,7 @@ def save_review(asset_id, user_id, valor_mercado, screenshot_path=None,
     """, (asset_id, user_id, valor_mercado, screenshot_path, prices_json, paths_json, observacao, now))
 
     fields = conn.execute(
-        "SELECT material, marca, modelo FROM assets WHERE id = ?", (asset_id,)
+        "SELECT material, marca, modelo, tipo FROM assets WHERE id = ?", (asset_id,)
     ).fetchone()
     if fields and fields['material'] and fields['marca'] and fields['modelo']:
         conn.execute("""
@@ -312,9 +312,10 @@ def save_review(asset_id, user_id, valor_mercado, screenshot_path=None,
             SELECT a.id, ?, ?, ?, ?, ?, ?, ?
             FROM assets a
             WHERE a.material = ? AND a.marca = ? AND a.modelo = ?
+              AND COALESCE(a.tipo, '') = COALESCE(?, '')
               AND a.id != ?
         """, (user_id, valor_mercado, screenshot_path, prices_json, paths_json, observacao, now,
-              fields['material'], fields['marca'], fields['modelo'], asset_id))
+              fields['material'], fields['marca'], fields['modelo'], fields['tipo'], asset_id))
 
     conn.commit()
     conn.close()
@@ -323,7 +324,7 @@ def save_review(asset_id, user_id, valor_mercado, screenshot_path=None,
 def get_group_size(asset_id):
     conn = get_db()
     fields = conn.execute(
-        "SELECT material, marca, modelo FROM assets WHERE id = ?", (asset_id,)
+        "SELECT material, marca, modelo, tipo FROM assets WHERE id = ?", (asset_id,)
     ).fetchone()
     if not fields or not fields['material'] or not fields['marca'] or not fields['modelo']:
         conn.close()
@@ -331,7 +332,8 @@ def get_group_size(asset_id):
     row = conn.execute("""
         SELECT COUNT(*) as cnt FROM assets
         WHERE material = ? AND marca = ? AND modelo = ?
-    """, (fields['material'], fields['marca'], fields['modelo'])).fetchone()
+          AND COALESCE(tipo, '') = COALESCE(?, '')
+    """, (fields['material'], fields['marca'], fields['modelo'], fields['tipo'])).fetchone()
     conn.close()
     return row['cnt'] if row else 1
 
@@ -357,10 +359,10 @@ def get_review(asset_id):
 
 
 def delete_review(asset_id, user_id):
-    """Remove a avaliação deste bem e de todos os do mesmo grupo atribuídos ao mesmo servidor."""
+    """Remove a avaliação deste bem e de todos os do mesmo grupo (mesmo tipo) atribuídos ao mesmo servidor."""
     conn = get_db()
     fields = conn.execute(
-        "SELECT material, marca, modelo FROM assets WHERE id = ?", (asset_id,)
+        "SELECT material, marca, modelo, tipo FROM assets WHERE id = ?", (asset_id,)
     ).fetchone()
     if fields and fields['material'] and fields['marca'] and fields['modelo']:
         conn.execute("""
@@ -369,9 +371,10 @@ def delete_review(asset_id, user_id):
                 SELECT a.id FROM assets a
                 JOIN assignments asg ON a.id = asg.asset_id
                 WHERE a.material = ? AND a.marca = ? AND a.modelo = ?
+                  AND COALESCE(a.tipo, '') = COALESCE(?, '')
                   AND asg.user_id = ?
             )
-        """, (fields['material'], fields['marca'], fields['modelo'], user_id))
+        """, (fields['material'], fields['marca'], fields['modelo'], fields['tipo'], user_id))
     else:
         conn.execute("DELETE FROM reviews WHERE asset_id = ?", (asset_id,))
     conn.commit()
@@ -402,12 +405,12 @@ def admin_delete_review(asset_id, admin_id, target_user_id, justificativa):
 
 
 def get_unique_count_by_planilha():
-    """Conta grupos únicos (material+marca+modelo) por planilha. Assets sem grupo completo contam 1 cada."""
+    """Grupos únicos por planilha. Chave: tipo + material + marca + modelo (assets incompletos contam 1 cada)."""
     conn = get_db()
     rows = conn.execute("""
         SELECT planilha, COUNT(DISTINCT
             CASE WHEN material IS NOT NULL AND marca IS NOT NULL AND modelo IS NOT NULL
-                 THEN material || '~~' || marca || '~~' || modelo
+                 THEN COALESCE(tipo, '') || '~~' || material || '~~' || marca || '~~' || modelo
                  ELSE CAST(id AS TEXT)
             END) AS unicos
         FROM assets
@@ -424,7 +427,7 @@ def get_unique_unassigned_by_planilha():
     rows = conn.execute("""
         SELECT a.planilha, COUNT(DISTINCT
             CASE WHEN a.material IS NOT NULL AND a.marca IS NOT NULL AND a.modelo IS NOT NULL
-                 THEN a.material || '~~' || a.marca || '~~' || a.modelo
+                 THEN COALESCE(a.tipo, '') || '~~' || a.material || '~~' || a.marca || '~~' || a.modelo
                  ELSE CAST(a.id AS TEXT)
             END) AS unicos
         FROM assets a
@@ -442,6 +445,7 @@ def get_unique_unassigned_by_planilha():
 def get_global_progress():
     conn = get_db()
     total = conn.execute("SELECT COUNT(*) FROM assets").fetchone()[0]
+    principais = conn.execute("SELECT COUNT(*) FROM assets WHERE tipo IS NULL").fetchone()[0]
     reviewed = conn.execute("SELECT COUNT(*) FROM reviews").fetchone()[0]
     unassigned = conn.execute("""
         SELECT COUNT(*) FROM assets a
@@ -449,7 +453,7 @@ def get_global_progress():
         WHERE asg.asset_id IS NULL
     """).fetchone()[0]
     conn.close()
-    return {"total": total, "reviewed": reviewed, "unassigned": unassigned}
+    return {"total": total, "principais": principais, "reviewed": reviewed, "unassigned": unassigned}
 
 
 def get_user_progress(user_id):
@@ -487,8 +491,10 @@ def get_progress_by_planilha():
     conn = get_db()
     rows = conn.execute("""
         SELECT a.planilha,
-               COUNT(a.id)  AS total,
-               COUNT(r.id)  AS reviewed
+               COUNT(a.id) AS total,
+               SUM(CASE WHEN a.tipo IS NULL THEN 1 ELSE 0 END) AS principais,
+               SUM(CASE WHEN a.tipo IS NOT NULL THEN 1 ELSE 0 END) AS agregacoes,
+               COUNT(r.id) AS reviewed
         FROM assets a
         LEFT JOIN reviews r ON a.id = r.asset_id
         GROUP BY a.planilha
