@@ -39,6 +39,7 @@
             <th>Material</th>
             <th>Marca / Modelo</th>
             <th>Planilha</th>
+            <th>Metodologia</th>
             <th class="text-end">Valor de Mercado</th>
             <th>Observação</th>
             <th>Data</th>
@@ -52,6 +53,20 @@
             <td><small>{{ a.material | strip_codigo }}</small></td>
             <td><small>{{ a.marca or '' }} {{ a.modelo or '' }}</small></td>
             <td><small>{{ a.planilha | planilha_curta }}</small></td>
+            <td>
+              {% if a.reviewed_at %}
+                {% if a.metodologia == 'M3' %}
+                  <span class="badge bg-info text-dark">M3 – IPCA</span>
+                  {% if a.ipca_percentual is not none %}<br><small class="text-muted">{{ '%.2f' | format(a.ipca_percentual) }}%</small>{% endif %}
+                {% elif a.metodologia == 'M2' %}
+                  <span class="badge bg-secondary">M2 – Acervo</span>
+                {% else %}
+                  <span class="badge bg-primary">M1 – Mercado</span>
+                {% endif %}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
             <td class="text-end text-nowrap">
               {% if a.reviewed_at %}
                 <span class="fw-semibold text-success">{{ a.valor_mercado | brl }}</span>

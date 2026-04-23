@@ -1,16 +1,16 @@
 # Sistema de Reavaliação de Bens Móveis
 
-Sistema web interno desenvolvido para auxiliar a **Câmara dos Deputados** no processo periódico de reavaliação de bens móveis patrimoniais. O sistema organiza o trabalho de múltiplos servidores que pesquisam o valor de mercado de cada bem em plataformas de e-commerce e registram os valores encontrados junto com prints comprobatórios.
+Sistema web interno desenvolvido para auxiliar a **Câmara dos Deputados** no processo periódico de reavaliação de bens móveis patrimoniais. O sistema organiza o trabalho de múltiplos servidores que pesquisam o valor de mercado de cada bem e registram os valores encontrados junto com prints comprobatórios.
 
 ---
 
 ## Visão Geral
 
-O processo de reavaliação exige que cada bem tenha seu **valor de mercado atual** pesquisado e documentado com imagens comprobatórias. Com 54.430 bens distribuídos em 9 planilhas Excel, o sistema permite que:
+O processo de reavaliação exige que cada bem tenha seu **valor de mercado atual** pesquisado e documentado. Com 54.430 bens distribuídos em 9 planilhas Excel, o sistema permite que:
 
 - O **administrador** distribua os bens entre os servidores e acompanhe o andamento em tempo real.
-- Cada **servidor** acesse apenas sua parcela de bens, realize as pesquisas em múltiplas plataformas, registre todos os preços encontrados e anexe os prints correspondentes.
-- Bens **idênticos** (mesmo material, marca e modelo) sejam avaliados uma única vez — a avaliação é propagada automaticamente para os demais.
+- Cada **servidor** acesse apenas sua parcela de bens, realize as pesquisas, registre os preços e annexe os prints correspondentes.
+- Bens **idênticos** (mesmo tipo, material, marca e modelo) sejam avaliados uma única vez — a avaliação é propagada automaticamente para os demais.
 - Ao final, os dados sejam exportados de volta para os arquivos Excel originais com a coluna de valor de mercado preenchida.
 
 ---
@@ -58,18 +58,15 @@ O servidor estará disponível em **http://localhost:5000**
 
 Acesse **Servidores** no menu superior e crie um login para cada servidor que participará do processo.
 
-- Informe um nome de usuário (sem espaços, ex: `joao.silva`)
-- Defina uma senha inicial (o servidor poderá usar esta senha ao longo do trabalho)
-
 #### 2. Distribuir os Bens
 
 Acesse **Distribuir** no menu superior. Existem três formas de atribuir bens:
 
 | Modalidade | Quando usar |
 |---|---|
-| **Por planilha** | Para designar uma categoria inteira (ex: todas as impressoras) a um servidor específico |
-| **Por quantidade** | Para dividir um número fixo de bens entre servidores, independentemente da categoria |
-| **Redistribuir** | Para mover os bens ainda não avaliados de um servidor para outro (ex: em caso de licença) |
+| **Por planilha** | Designa uma categoria inteira a um servidor específico |
+| **Por grupos únicos** | Atribui N grupos únicos de uma planilha. Cada grupo (mesmo tipo+material+marca+modelo) conta como 1, mas todos os bens do grupo são distribuídos juntos |
+| **Redistribuir** | Move os bens ainda não avaliados de um servidor para outro (ex: licença) |
 
 > Os bens já avaliados não são afetados pela redistribuição.
 
@@ -77,18 +74,18 @@ Acesse **Distribuir** no menu superior. Existem três formas de atribuir bens:
 
 O **Dashboard** (`/admin`) exibe:
 - Progresso geral com total de bens avaliados
-- Progresso individual de cada servidor (bens atribuídos vs. concluídos)
-- Progresso por planilha/categoria
+- Progresso individual de cada servidor
+- Progresso por planilha, discriminando bens principais, agregações e grupos únicos
 
-#### 4. Exportar os Resultados
+#### 4. Ver Bens de um Servidor
 
-Quando o trabalho estiver concluído (total ou parcialmente), clique em **Exportar Excel** no Dashboard. O sistema irá:
+Na tela **Servidores**, clique em **Bens** para ver a lista completa de bens atribuídos a um servidor, com valor de mercado, metodologia utilizada, observação e data de avaliação. É possível desfazer avaliações individuais informando uma justificativa.
 
-1. Gerar uma cópia de cada planilha original na pasta `output/`
-2. Preencher a coluna **VALOR DE MERCADO (VMB)** com a média dos preços pesquisados
-3. Preservar todas as fórmulas das colunas seguintes (fator de reavaliação, valor reavaliado, etc.), que recalcularão automaticamente ao abrir o arquivo no Excel
+#### 5. Exportar os Resultados
 
-Os arquivos gerados seguem o padrão: `<nome_original>_avaliado_<data_hora>.xlsx`
+Clique em **Exportar Excel** no Dashboard. O sistema gera cópias das planilhas originais em `output/` com:
+- Coluna 10 (VMB) preenchida com o valor de mercado
+- Coluna 11 com a metodologia utilizada (`M1`, `M2` ou `M3`)
 
 ---
 
@@ -96,64 +93,66 @@ Os arquivos gerados seguem o padrão: `<nome_original>_avaliado_<data_hora>.xlsx
 
 #### Tela de Avaliação
 
-Ao fazer login, o servidor é direcionado automaticamente ao seu próximo bem pendente.
+Ao fazer login, o servidor é direcionado automaticamente ao seu próximo bem pendente. A sidebar lateral lista todos os bens atribuídos com filtro por texto e toggle "Só pendentes".
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│  Lista de bens  │  APARELHO TELEFÔNICO CELULAR - GRADIENTE TD-600│
-│  (sidebar)      │  NRP · Tipo · Data de Tombamento · Vlr Contábil│
-│                 │                                                  │
-│  ✓ BEM 1        │  [Mercado Livre] [Amazon] [Google] [Buscapé]   │
-│  ✓ BEM 2        │                                                  │
-│  → BEM 3 ←      │  Preços encontrados                             │
-│    BEM 4        │  R$[________] [+]                               │
-│    BEM 5        │  [R$ 1.500,00 ×] [R$ 1.800,00 ×]               │
-│    ...          │  Média (Valor de Mercado): R$ 1.650,00          │
-│                 │                                                  │
-│                 │  Prints da pesquisa                             │
-│                 │  [thumb1 ×] [thumb2 ×] [+ Adicionar]           │
-│                 │                                                  │
-│                 │  [Anterior]  [Pular]  [Salvar e Próximo →]      │
-└──────────────────────────────────────────────────────────────────┘
-```
+#### Metodologias de Avaliação
 
-#### Passo a passo para avaliar um bem
+Cada bem deve ser avaliado com uma das três metodologias disponíveis, selecionadas por radio buttons no topo do formulário:
 
-1. **Leia as informações do bem**: o título exibe o nome completo no formato  
-   `MATERIAL - MARCA MODELO`. NRP, tipo, data de tombamento e valor contábil aparecem abaixo.
+---
 
-2. **Pesquise o valor atual**: clique em um dos botões de busca. O sistema abrirá uma nova aba já com o nome completo do bem pesquisado:
-   - Mercado Livre
-   - Amazon
-   - Google Shopping
-   - Buscapé
+**M1 – Pesquisa de mercado**
 
-3. **Registre cada preço encontrado**: no campo **Preços encontrados**, digite o valor e clique em **+** (ou pressione **Enter**). Repita para cada plataforma pesquisada. O **Valor de Mercado** (média) é calculado automaticamente.
-   - Para remover um preço, clique no **×** ao lado do badge.
+Pesquisa o bem em plataformas de e-commerce. Links de busca diretos para Mercado Livre, Amazon, Google Shopping e Buscapé são fornecidos automaticamente.
 
-4. **Anexe os prints**: após registrar um preço, tire print da tela e anexe como comprovante. O print pode ser adicionado de três formas:
-   - **Colar**: após copiar a imagem (`Print Screen` ou Snipping Tool), cole com `Ctrl+V`
-   - **Arrastar**: arraste o arquivo de imagem para a área indicada
-   - **Selecionar arquivo**: clique em **Adicionar print** e escolha o arquivo
-   - Repita para adicionar prints de cada plataforma pesquisada.
+1. Clique no botão da plataforma desejada (abre em nova aba já com o nome do bem).
+2. No campo **Preços encontrados**, registre cada valor localizado e clique em **+** (ou Enter).
+3. O **Valor de Mercado** é calculado automaticamente como a média dos preços. O valor pode ser editado manualmente se necessário.
+4. Annexe os prints da pesquisa (Ctrl+V, arrastar ou selecionar arquivo).
+5. Clique em **Salvar e Próximo**.
 
-5. **Salve**: clique em **Salvar e Próximo**. O sistema salva a avaliação e carrega automaticamente o próximo bem pendente.
+---
+
+**M2 – Acervo patrimonial**
+
+Idêntica à M1, mas voltada para consulta em acervos patrimoniais de referência. Os botões de busca em e-commerce são ocultados.
+
+---
+
+**M3 – Correção pelo IPCA**
+
+Atualiza o valor contábil do bem desde a data de tombamento até hoje usando o IPCA acumulado.
+
+1. O valor contábil e a data de tombamento aparecem para conferência.
+2. Clique em **Buscar IPCA** — o sistema consulta automaticamente a API do Banco Central (série 433) e preenche o percentual acumulado.
+3. O **Valor de Mercado** é calculado automaticamente: `valor_contábil × (1 + IPCA% / 100)`.
+4. Se preferir conferir manualmente, use o link **Calculadora do Banco Central**.
+5. Clique em **Salvar** (prints não são necessários nesta metodologia).
+
+> M3 requer que o bem possua valor contábil e data de tombamento cadastrados.
+
+---
 
 #### Navegação
 
-- **Anterior**: volta ao bem anterior (útil para corrigir uma avaliação já salva)
-- **Pular**: avança para o próximo bem sem salvar (o bem pulado voltará à fila)
-- A **sidebar** lateral lista todos os bens atribuídos, com indicação visual de concluído (✓) ou pendente
+- **Anterior**: volta ao bem anterior
+- **Pular**: avança para o próximo sem salvar
+- **Refazer**: remove a avaliação atual para que possa ser refeita
+- A sidebar lista todos os bens com indicação visual de concluído (✓) ou pendente
+
+#### Alterar Senha
+
+O servidor pode alterar sua própria senha acessando **Senha** na navbar.
 
 ---
 
 ## Avaliação em Grupo
 
-Muitos bens possuem o mesmo material, marca e modelo — diferindo apenas pelo NRP (número de registro patrimonial). Nesses casos, **basta avaliar um único bem do grupo**: o sistema propaga automaticamente o mesmo valor de mercado e prints para todos os demais bens com as mesmas características.
+Bens com mesmo tipo, material, marca e modelo diferem apenas pelo NRP. **Basta avaliar um único bem do grupo**: o sistema propaga automaticamente o mesmo valor de mercado para todos os demais.
 
-Ao acessar um bem que pertence a um grupo, um aviso é exibido indicando quantos bens serão avaliados automaticamente ao salvar:
+Ao acessar um bem de grupo, um aviso indica quantos bens serão avaliados automaticamente ao salvar.
 
-> ℹ️ Este bem pertence a um grupo de **12** bens com o mesmo material, marca e modelo. Ao salvar esta avaliação, os demais **11** serão avaliados automaticamente.
+> Os bens principais (tipo vazio) e suas agregações (tipo = "Agregação") formam grupos separados. Avaliar um principal não propaga para as agregações e vice-versa.
 
 ---
 
@@ -167,27 +166,24 @@ reavaliacao_bens/
 ├── excel_exporter.py       # Exportação dos resultados para Excel
 ├── requirements.txt        # Dependências Python
 │
-├── planilhas_excel/        # Planilhas originais (não modificadas)
-│   ├── ND 44905206 - APARELHOS E EQUIPAMENTOS DE COMUNICAÇÃO.xlsx
-│   ├── ND 44905233 - EQUIPAMENTOS PARA ÁUDIO, VÍDEO E FOTO.xlsx
-│   ├── ND 44905235 - EQUIPAMENTOS DE PROCESSAMENTO DE DADOS.xlsx
-│   ├── ND 44905241 - EQUIPAMENTOS DE TIC (COMPUTADORES).xlsx
-│   └── ... (demais planilhas)
+├── planilhas_excel/        # Planilhas originais (NUNCA modificar)
 │
 ├── templates/
 │   ├── base.html           # Layout base com navbar
 │   ├── login.html
-│   ├── admin/              # Telas do administrador
+│   ├── admin/
 │   │   ├── dashboard.html
 │   │   ├── usuarios.html
 │   │   ├── editar_usuario.html
-│   │   └── distribuir.html
+│   │   ├── distribuir.html
+│   │   └── usuario_bens.html   # Bens de um servidor (admin)
 │   └── servidor/
-│       └── avaliar.html    # Tela principal de avaliação
+│       ├── avaliar.html        # Tela principal de avaliação
+│       └── minha_senha.html    # Alterar senha
 │
 ├── static/
 │   ├── style.css
-│   └── app.js              # Lógica de preços, clipboard, drag&drop
+│   └── app.js              # Lógica de preços, IPCA, screenshots, metodologias
 │
 ├── reavaliacao.db          # Banco de dados (gerado automaticamente)
 ├── screenshots/            # Prints salvos (gerado automaticamente)
@@ -203,21 +199,27 @@ reavaliacao_bens/
 | Linguagem | Python 3.12 |
 | Framework web | Flask 3.x |
 | Banco de dados | SQLite (modo WAL) |
-| Leitura de Excel | openpyxl |
+| Leitura/escrita de Excel | openpyxl |
 | Processamento de imagens | Pillow |
+| Busca de IPCA | requests → API Banco Central (série 433) |
 | Interface | Bootstrap 5 + JavaScript puro |
 | Autenticação | Sessão server-side + hash werkzeug |
 | Compatibilidade | Windows · Linux · macOS |
 
 ### Segurança
 
-- As senhas são armazenadas como hashes (nunca em texto puro)
-- Cada servidor só consegue visualizar e avaliar os bens atribuídos a ele
-- As planilhas Excel originais nunca são alteradas; a exportação sempre gera novos arquivos
+- Senhas armazenadas como hashes (werkzeug)
+- Cada servidor só visualiza e avalia os bens atribuídos a ele
+- As planilhas originais nunca são alteradas; a exportação sempre gera novos arquivos
+- Ações administrativas sensíveis (desfazer avaliação) são registradas em `audit_log`
+
+### Rede Corporativa
+
+Em ambientes com proxy de inspeção SSL (ex: rede interna da Câmara), a chamada à API do Banco Central usa `verify=False` para contornar certificados auto-assinados na cadeia corporativa.
 
 ### Backup
 
-O arquivo `reavaliacao.db` contém todos os dados do sistema (usuários, distribuições e avaliações). Recomenda-se fazer cópias regulares deste arquivo durante o processo de reavaliação.
+O arquivo `reavaliacao.db` contém todos os dados do sistema. Recomenda-se fazer cópias regulares durante o processo de reavaliação.
 
 ---
 
@@ -227,4 +229,5 @@ O arquivo `reavaliacao.db` contém todos os dados do sistema (usuários, distrib
 flask       — framework web
 openpyxl    — leitura e escrita de arquivos .xlsx
 pillow      — processamento das imagens de comprovante
+requests    — consulta à API do Banco Central (IPCA)
 ```

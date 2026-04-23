@@ -24,7 +24,7 @@ def export_all():
     conn = get_db()
     for planilha in get_distinct_planilhas():
         rows = conn.execute("""
-            SELECT a.row_index, r.valor_mercado
+            SELECT a.row_index, r.valor_mercado, r.metodologia
             FROM assets a
             JOIN reviews r ON a.id = r.asset_id
             WHERE a.planilha = ?
@@ -42,8 +42,9 @@ def export_all():
 
         wb = openpyxl.load_workbook(dst)
         ws = wb.active
-        for row_index, valor_mercado in rows:
+        for row_index, valor_mercado, metodologia in rows:
             ws.cell(row=row_index, column=VMB_COL).value = valor_mercado
+            ws.cell(row=row_index, column=VMB_COL + 1).value = metodologia or 'M1'
         wb.save(dst)
         wb.close()
         exported.append(os.path.basename(dst))

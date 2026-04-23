@@ -118,9 +118,28 @@
     </div>
     {% endif %}
 
+    {# Seletor de metodologia #}
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-body py-2">
+        <span class="fw-semibold me-3">Metodologia</span>
+        <div class="form-check form-check-inline">
+          <input class="form-check-input" type="radio" name="metodologia" id="met-m1" value="M1" checked>
+          <label class="form-check-label" for="met-m1">M1 – Pesquisa de mercado</label>
+        </div>
+        <div class="form-check form-check-inline">
+          <input class="form-check-input" type="radio" name="metodologia" id="met-m2" value="M2">
+          <label class="form-check-label" for="met-m2">M2 – Acervo patrimonial</label>
+        </div>
+        <div class="form-check form-check-inline">
+          <input class="form-check-input" type="radio" name="metodologia" id="met-m3" value="M3">
+          <label class="form-check-label" for="met-m3">M3 – Correção IPCA</label>
+        </div>
+      </div>
+    </div>
+
     {# Botões de pesquisa #}
     {% set query = ((asset.material | strip_codigo) + ((' - ' + asset.marca) if asset.marca else '') + ((' ' + asset.modelo) if asset.modelo else '')) | urlencode %}
-    <div class="d-flex flex-wrap gap-2 mb-3">
+    <div id="section-search-links" class="d-flex flex-wrap gap-2 mb-3">
       <a href="https://lista.mercadolivre.com.br/{{ query }}"
          target="_blank" class="btn btn-outline-warning btn-sm fw-semibold">
         <i class="bi bi-search me-1"></i> Mercado Livre
@@ -146,25 +165,58 @@
 
       <div class="row g-3">
 
-        {# ── Preços ── #}
+        {# ── Preços / IPCA ── #}
         <div class="col-lg-5">
-          <label class="form-label fw-semibold">Preços encontrados</label>
-          <div class="d-flex gap-2 mb-2">
-            <div class="input-group">
-              <span class="input-group-text">R$</span>
-              <input type="text" id="price-input" class="form-control"
-                     placeholder="0,00" autocomplete="off">
+          {# Seção M1/M2 — preços #}
+          <div id="section-prices">
+            <label id="label-prices" class="form-label fw-semibold">Preços encontrados</label>
+            <div class="d-flex gap-2 mb-2">
+              <div class="input-group">
+                <span class="input-group-text">R$</span>
+                <input type="text" id="price-input" class="form-control"
+                       placeholder="0,00" autocomplete="off">
+              </div>
+              <button type="button" class="btn btn-outline-primary flex-shrink-0" id="btn-add-price"
+                      title="Adicionar preço (Enter)">
+                <i class="bi bi-plus-lg"></i>
+              </button>
             </div>
-            <button type="button" class="btn btn-outline-primary flex-shrink-0" id="btn-add-price"
-                    title="Adicionar preço (Enter)">
-              <i class="bi bi-plus-lg"></i>
-            </button>
+            <div id="prices-list" class="d-flex flex-wrap gap-2 mb-3" style="min-height:2rem"></div>
           </div>
-          <div id="prices-list" class="d-flex flex-wrap gap-2 mb-3" style="min-height:2rem"></div>
+
+          {# Seção M3 — IPCA #}
+          <div id="section-ipca" class="d-none"
+               data-vc="{{ asset.valor_contabil or '' }}"
+               data-tombamento="{{ asset.data_tombamento or '' }}">
+            <label class="form-label fw-semibold">Correção pelo IPCA</label>
+            <div class="mb-2 small text-muted">
+              <b>Valor Contábil:</b>
+              {{ asset.valor_contabil | brl if asset.valor_contabil else '—' }}
+              &nbsp;·&nbsp;
+              <b>Tombamento:</b> {{ asset.data_tombamento or '—' }}
+            </div>
+            <label class="form-label small">Correção IPCA acumulada</label>
+            <div class="input-group mb-1">
+              <input type="text" id="ipca-input" name="ipca_percentual"
+                     class="form-control" placeholder="0,00" autocomplete="off">
+              <span class="input-group-text">%</span>
+              <button type="button" class="btn btn-outline-secondary" id="btn-fetch-ipca"
+                      {% if not asset.data_tombamento %}disabled title="Bem sem data de tombamento"{% endif %}>
+                <i class="bi bi-cloud-download me-1"></i>Buscar IPCA
+              </button>
+            </div>
+            <div id="ipca-status" class="form-text mb-2"></div>
+            <a href="https://www3.bcb.gov.br/CALCIDADAO/publico/exibirFormCorrecaoValores.do?method=exibirFormCorrecaoValores"
+               target="_blank" class="btn btn-link btn-sm px-0 text-decoration-none small">
+              <i class="bi bi-calculator me-1"></i>Calculadora do Banco Central
+            </a>
+          </div>
+
+          {# Valor de mercado — visível em todas as metodologias #}
           <div class="border-top pt-2">
             <label class="form-label small text-muted mb-1">
               Valor de Mercado
-              <span class="text-muted fw-normal">(média calculada; editável)</span>
+              <span id="label-avg-context" class="fw-normal">(média calculada; editável)</span>
             </label>
             <div class="input-group">
               <span class="input-group-text fw-semibold">R$</span>
@@ -184,7 +236,7 @@
         </div>
 
         {# ── Prints ── #}
-        <div class="col-lg-7">
+        <div id="section-screenshots" class="col-lg-7">
           <label class="form-label fw-semibold">
             Prints da pesquisa
             <span class="text-muted fw-normal small">(arraste, cole Ctrl+V ou clique)</span>
@@ -251,7 +303,9 @@
   initAvaliar(
     {{ (review.prices if review and review.prices else []) | tojson }},
     {{ (review.screenshot_paths if review and review.screenshot_paths else []) | tojson }},
-    {{ review.valor_mercado | tojson if review else 'null' }}
+    {{ review.valor_mercado | tojson if review else 'null' }},
+    {{ review.metodologia | tojson if review and review.metodologia else '"M1"' }},
+    {{ review.ipca_percentual | tojson if review and review.ipca_percentual is not none else 'null' }}
   );
   {% endif %}
 </script>

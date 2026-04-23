@@ -3,12 +3,15 @@ import re
 import json
 import base64
 import functools
-from datetime import datetime
+from datetime import datetime, date
 from flask import (Flask, render_template, request, session, redirect,
                    url_for, flash, jsonify, send_from_directory)
 from werkzeug.security import generate_password_hash, check_password_hash
 from PIL import Image
 import io
+import requests as http_requests
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 import database as db
 from excel_loader import load_excel_files
@@ -278,29 +281,56 @@ def avaliar_bem(asset_id):
         return redirect(url_for('avaliar'))
 
     if request.method == 'POST':
-        # Preços
-        try:
-            prices = [float(p) for p in json.loads(request.form.get('prices_json', '[]'))
-                      if str(p).strip()]
-        except Exception:
-            prices = []
+        metodologia = request.form.get('metodologia', 'M1')
+        if metodologia not in ('M1', 'M2', 'M3'):
+            metodologia = 'M1'
+        ipca_percentual = None
 
-        if not prices:
-            flash('Adicione ao menos um preço encontrado.', 'danger')
-            return _render_avaliar(asset_id, asset)
-
-        # Valor de mercado: usa o campo editável; fallback para a média dos preços
-        manual_str = request.form.get('valor_mercado_manual', '').strip()
-        if manual_str:
+        if metodologia in ('M1', 'M2'):
+            # Preços obrigatórios para M1/M2
             try:
-                valor = float(manual_str.replace('.', '').replace(',', '.'))
-                if valor <= 0:
+                prices = [float(p) for p in json.loads(request.form.get('prices_json', '[]'))
+                          if str(p).strip()]
+            except Exception:
+                prices = []
+
+            if not prices:
+                flash('Adicione ao menos um preço encontrado.', 'danger')
+                return _render_avaliar(asset_id, asset)
+
+            # Valor de mercado: usa o campo editável; fallback para a média dos preços
+            manual_str = request.form.get('valor_mercado_manual', '').strip()
+            if manual_str:
+                try:
+                    valor = float(manual_str.replace('.', '').replace(',', '.'))
+                    if valor <= 0:
+                        raise ValueError
+                except ValueError:
+                    flash('Valor de mercado inválido.', 'danger')
+                    return _render_avaliar(asset_id, asset)
+            else:
+                valor = sum(prices) / len(prices)
+
+        else:  # M3 — Correção IPCA
+            prices = []
+            ipca_str = request.form.get('ipca_percentual', '').strip()
+            if not ipca_str:
+                flash('Informe o percentual de correção IPCA.', 'danger')
+                return _render_avaliar(asset_id, asset)
+            try:
+                ipca_percentual = float(ipca_str.replace('.', '').replace(',', '.'))
+                if ipca_percentual < 0:
                     raise ValueError
             except ValueError:
-                flash('Valor de mercado inválido.', 'danger')
+                flash('Percentual IPCA inválido.', 'danger')
                 return _render_avaliar(asset_id, asset)
-        else:
-            valor = sum(prices) / len(prices)
+
+            vc = asset.get('valor_contabil')
+            if not vc:
+                flash('Este bem não possui valor contábil. Não é possível aplicar correção IPCA.', 'danger')
+                return _render_avaliar(asset_id, asset)
+
+            valor = vc * (1 + ipca_percentual / 100)
 
         # Screenshots existentes a manter
         try:
@@ -329,7 +359,9 @@ def avaliar_bem(asset_id):
                        screenshot_path=all_paths[0] if all_paths else None,
                        prices=prices,
                        screenshot_paths=all_paths if all_paths else None,
-                       observacao=observacao)
+                       observacao=observacao,
+                       metodologia=metodologia,
+                       ipca_percentual=ipca_percentual)
         flash('Avaliação salva!', 'success')
 
         next_asset = db.get_next_pending_asset(session['user_id'])
@@ -458,6 +490,30 @@ def admin_excluir_usuario(user_id):
 @login_required
 def api_progress():
     return jsonify(db.get_user_progress(session['user_id']))
+
+
+@app.route('/api/ipca')
+@login_required
+def api_ipca():
+    data_inicio = request.args.get('data_inicio', '').strip()
+    if not data_inicio:
+        return jsonify({'error': 'data_inicio é obrigatório'}), 400
+    try:
+        hoje = date.today().strftime('%d/%m/%Y')
+        url = (f'https://api.bcb.gov.br/dados/serie/bcdata.sgs.433/dados'
+               f'?formato=json&dataInicial={data_inicio}&dataFinal={hoje}')
+        resp = http_requests.get(url, timeout=10, verify=False)
+        resp.raise_for_status()
+        data = resp.json()
+        if not data:
+            return jsonify({'acumulado': 0.0})
+        acumulado = 1.0
+        for entry in data:
+            v = float(entry['valor'].replace(',', '.'))
+            acumulado *= (1 + v / 100)
+        return jsonify({'acumulado': round((acumulado - 1) * 100, 4)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/screenshots/<path:filename>')

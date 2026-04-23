@@ -67,7 +67,13 @@ def init_db():
     """)
     conn.commit()
     # Migração: adiciona colunas novas se ainda não existirem
-    for col, defn in [('prices', 'TEXT'), ('screenshot_paths', 'TEXT'), ('observacao', 'TEXT')]:
+    for col, defn in [
+        ('prices',          'TEXT'),
+        ('screenshot_paths','TEXT'),
+        ('observacao',      'TEXT'),
+        ('metodologia',     'TEXT DEFAULT "M1"'),
+        ('ipca_percentual', 'REAL'),
+    ]:
         try:
             conn.execute(f'ALTER TABLE reviews ADD COLUMN {col} {defn}')
             conn.commit()
@@ -293,7 +299,8 @@ def reassign_pending(from_user_id, to_user_id):
 def get_assets_for_user(user_id):
     conn = get_db()
     rows = conn.execute("""
-        SELECT a.*, r.valor_mercado, r.screenshot_path, r.observacao, r.updated_at AS reviewed_at
+        SELECT a.*, r.valor_mercado, r.screenshot_path, r.observacao,
+               r.metodologia, r.ipca_percentual, r.updated_at AS reviewed_at
         FROM assets a
         JOIN assignments asg ON a.id = asg.asset_id
         LEFT JOIN reviews r ON a.id = r.asset_id
@@ -342,24 +349,29 @@ def get_adjacent_asset_ids(user_id, current_asset_id):
 # ── Reviews ────────────────────────────────────────────────────────────────
 
 def save_review(asset_id, user_id, valor_mercado, screenshot_path=None,
-                prices=None, screenshot_paths=None, observacao=None):
+                prices=None, screenshot_paths=None, observacao=None,
+                metodologia='M1', ipca_percentual=None):
     now = datetime.utcnow().isoformat()
     prices_json = json.dumps(prices) if prices else None
     paths_json  = json.dumps(screenshot_paths) if screenshot_paths else None
     conn = get_db()
     conn.execute("""
         INSERT INTO reviews
-            (asset_id, user_id, valor_mercado, screenshot_path, prices, screenshot_paths, observacao, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (asset_id, user_id, valor_mercado, screenshot_path, prices, screenshot_paths,
+             observacao, metodologia, ipca_percentual, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(asset_id) DO UPDATE SET
             valor_mercado    = excluded.valor_mercado,
             screenshot_path  = excluded.screenshot_path,
             prices           = excluded.prices,
             screenshot_paths = excluded.screenshot_paths,
             observacao       = excluded.observacao,
+            metodologia      = excluded.metodologia,
+            ipca_percentual  = excluded.ipca_percentual,
             user_id          = excluded.user_id,
             updated_at       = excluded.updated_at
-    """, (asset_id, user_id, valor_mercado, screenshot_path, prices_json, paths_json, observacao, now))
+    """, (asset_id, user_id, valor_mercado, screenshot_path, prices_json, paths_json,
+          observacao, metodologia, ipca_percentual, now))
 
     fields = conn.execute(
         "SELECT material, marca, modelo, tipo FROM assets WHERE id = ?", (asset_id,)
@@ -367,13 +379,15 @@ def save_review(asset_id, user_id, valor_mercado, screenshot_path=None,
     if fields and fields['material'] and fields['marca'] and fields['modelo']:
         conn.execute("""
             INSERT OR IGNORE INTO reviews
-                (asset_id, user_id, valor_mercado, screenshot_path, prices, screenshot_paths, observacao, updated_at)
-            SELECT a.id, ?, ?, ?, ?, ?, ?, ?
+                (asset_id, user_id, valor_mercado, screenshot_path, prices, screenshot_paths,
+                 observacao, metodologia, ipca_percentual, updated_at)
+            SELECT a.id, ?, ?, ?, ?, ?, ?, ?, ?, ?
             FROM assets a
             WHERE a.material = ? AND a.marca = ? AND a.modelo = ?
               AND COALESCE(a.tipo, '') = COALESCE(?, '')
               AND a.id != ?
-        """, (user_id, valor_mercado, screenshot_path, prices_json, paths_json, observacao, now,
+        """, (user_id, valor_mercado, screenshot_path, prices_json, paths_json, observacao,
+              metodologia, ipca_percentual, now,
               fields['material'], fields['marca'], fields['modelo'], fields['tipo'], asset_id))
 
     conn.commit()

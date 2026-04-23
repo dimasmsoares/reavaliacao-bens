@@ -2,25 +2,35 @@
 
 (function () {
   // ── State ────────────────────────────────────────────────────────────────
-  let prices      = [];   // float[]
-  let screenshots = [];   // {id, type:'existing'|'new', path?:string, dataUrl?:string}
-  let ssIdx       = 0;
+  let prices            = [];   // float[]
+  let screenshots       = [];   // {id, type:'existing'|'new', path?:string, dataUrl?:string}
+  let ssIdx             = 0;
+  let currentMetodologia = 'M1';
 
   // ── Elementos ────────────────────────────────────────────────────────────
   const form        = document.getElementById('form-avaliar');
   if (!form) return;
 
-  const priceInput  = document.getElementById('price-input');
-  const btnAddPrice = document.getElementById('btn-add-price');
-  const pricesList  = document.getElementById('prices-list');
-  const avgInput    = document.getElementById('avg-input');
-  const avgDiffWarn = document.getElementById('avg-diff-warn');
-  const btnResetAvg = document.getElementById('btn-reset-avg');
-  const pricesJson  = document.getElementById('prices_json');
-  const existingJson= document.getElementById('existing_screenshots');
-  const dropZone    = document.getElementById('drop-zone');
-  const fileInput   = document.getElementById('file-input');
-  const ssGrid      = document.getElementById('screenshots-grid');
+  const priceInput    = document.getElementById('price-input');
+  const btnAddPrice   = document.getElementById('btn-add-price');
+  const pricesList    = document.getElementById('prices-list');
+  const avgInput      = document.getElementById('avg-input');
+  const avgDiffWarn   = document.getElementById('avg-diff-warn');
+  const btnResetAvg   = document.getElementById('btn-reset-avg');
+  const pricesJson    = document.getElementById('prices_json');
+  const existingJson  = document.getElementById('existing_screenshots');
+  const dropZone      = document.getElementById('drop-zone');
+  const fileInput     = document.getElementById('file-input');
+  const ssGrid        = document.getElementById('screenshots-grid');
+  const sectionPrices      = document.getElementById('section-prices');
+  const sectionIpca        = document.getElementById('section-ipca');
+  const sectionSearch      = document.getElementById('section-search-links');
+  const sectionScreenshots = document.getElementById('section-screenshots');
+  const labelPrices        = document.getElementById('label-prices');
+  const labelAvgCtx        = document.getElementById('label-avg-context');
+  const ipcaInput          = document.getElementById('ipca-input');
+  const ipcaStatus         = document.getElementById('ipca-status');
+  const btnFetchIpca       = document.getElementById('btn-fetch-ipca');
 
   // ── Utilidades ───────────────────────────────────────────────────────────
   function parseBRL(s) {
@@ -30,6 +40,78 @@
   function formatBRL(n) {
     return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
+
+  // ── Metodologia ──────────────────────────────────────────────────────────
+
+  function switchMetodologia(m) {
+    currentMetodologia = m;
+    const isM3 = m === 'M3';
+    const isM2 = m === 'M2';
+
+    if (sectionPrices)      sectionPrices.classList.toggle('d-none', isM3);
+    if (sectionIpca)        sectionIpca.classList.toggle('d-none', !isM3);
+    if (sectionSearch)      sectionSearch.classList.toggle('d-none', isM3 || isM2);
+    if (sectionScreenshots) sectionScreenshots.classList.toggle('d-none', isM3);
+
+    if (labelPrices) labelPrices.textContent = isM2 ? 'Preços no acervo' : 'Preços encontrados';
+    if (labelAvgCtx) labelAvgCtx.textContent = isM3
+      ? '(corrigido pelo IPCA; somente leitura)'
+      : '(média calculada; editável)';
+
+    if (avgInput) {
+      avgInput.readOnly = isM3;
+      avgInput.classList.toggle('text-info',    isM3);
+      avgInput.classList.toggle('text-success', !isM3);
+    }
+    if (btnResetAvg) btnResetAvg.classList.toggle('d-none', isM3);
+    if (avgDiffWarn && isM3) avgDiffWarn.classList.add('d-none');
+
+    if (isM3) updateIPCAValor();
+  }
+
+  function updateIPCAValor() {
+    if (!ipcaInput || !avgInput || !sectionIpca) return;
+    const ipca  = parseBRL(ipcaInput.value.trim());
+    const vcStr = sectionIpca.dataset.vc;
+    const vc    = vcStr ? parseFloat(vcStr) : null;
+    if (isNaN(ipca) || !vc) { avgInput.value = ''; return; }
+    avgInput.value = formatBRL(vc * (1 + ipca / 100));
+  }
+
+  async function fetchIPCA() {
+    if (!sectionIpca || !ipcaStatus) return;
+    const tomb = sectionIpca.dataset.tombamento || '';
+    if (!tomb) return;
+    ipcaStatus.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span>Buscando…';
+    ipcaStatus.className = 'form-text text-muted';
+    try {
+      const resp = await fetch('/api/ipca?data_inicio=' + encodeURIComponent(tomb));
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error);
+      if (ipcaInput) ipcaInput.value = formatBRL(data.acumulado);
+      updateIPCAValor();
+      ipcaStatus.textContent = `IPCA acumulado de ${tomb} até hoje: ${formatBRL(data.acumulado)}%`;
+      ipcaStatus.className = 'form-text text-success';
+    } catch (err) {
+      ipcaStatus.textContent = 'Erro ao buscar IPCA: ' + err.message;
+      ipcaStatus.className = 'form-text text-danger';
+    }
+  }
+
+  // Listeners de metodologia
+  document.querySelectorAll('input[name="metodologia"]').forEach(function (radio) {
+    radio.addEventListener('change', function () { switchMetodologia(this.value); });
+  });
+
+  if (ipcaInput) {
+    ipcaInput.addEventListener('input', updateIPCAValor);
+    ipcaInput.addEventListener('blur', function () {
+      const n = parseBRL(this.value.trim());
+      if (!isNaN(n) && this.value.trim()) this.value = formatBRL(n);
+      updateIPCAValor();
+    });
+  }
+  if (btnFetchIpca) btnFetchIpca.addEventListener('click', fetchIPCA);
 
   // ── Valor de mercado (editável) ──────────────────────────────────────────
   let calcAvg = null;  // média calculada pelos preços
@@ -195,11 +277,20 @@
 
   // ── Validação no submit ──────────────────────────────────────────────────
   form.addEventListener('submit', function (e) {
-    if (prices.length === 0) {
-      e.preventDefault();
-      priceInput.classList.add('is-invalid');
-      priceInput.focus();
-      return;
+    if (currentMetodologia !== 'M3') {
+      if (prices.length === 0) {
+        e.preventDefault();
+        if (priceInput) { priceInput.classList.add('is-invalid'); priceInput.focus(); }
+        return;
+      }
+    } else {
+      const ipcaVal = ipcaInput ? parseBRL(ipcaInput.value.trim()) : NaN;
+      if (isNaN(ipcaVal) || ipcaVal < 0) {
+        e.preventDefault();
+        if (ipcaInput) { ipcaInput.classList.add('is-invalid'); ipcaInput.focus(); }
+        return;
+      }
+      if (ipcaInput) ipcaInput.classList.remove('is-invalid');
     }
     const valStr = avgInput ? avgInput.value.trim() : '';
     const valNum = parseBRL(valStr);
@@ -209,7 +300,7 @@
       return;
     }
     if (avgInput) avgInput.classList.remove('is-invalid');
-    if (screenshots.length === 0) {
+    if (currentMetodologia !== 'M3' && screenshots.length === 0) {
       if (!confirm('Nenhum print de comprovante foi anexado.\nDeseja salvar assim mesmo?')) {
         e.preventDefault();
       }
@@ -236,11 +327,12 @@
   if (sidebarOnlyPending) sidebarOnlyPending.addEventListener('change', filterSidebar);
 
   // ── Inicialização com dados do servidor ─────────────────────────────────
-  window.initAvaliar = function (existingPrices, existingPaths, existingValorMercado) {
+  window.initAvaliar = function (existingPrices, existingPaths, existingValorMercado,
+                                  existingMetodologia, existingIpcaPercentual) {
     prices = (existingPrices || []).map(Number).filter(n => !isNaN(n));
     renderPrices();  // calcula média e preenche avg-input
 
-    // Se o valor salvo difere da média calculada, é uma edição manual anterior
+    // Se o valor salvo difere da média calculada, é uma edição manual anterior (M1/M2)
     if (existingValorMercado !== null && existingValorMercado !== undefined && avgInput) {
       const calculado = calcAvgFromPrices();
       if (calculado === null || Math.abs(existingValorMercado - calculado) > 0.01) {
@@ -254,5 +346,19 @@
       screenshots.push({ id: ++ssIdx, type: 'existing', path });
     });
     renderScreenshots();
+
+    // Restaurar metodologia
+    const met = existingMetodologia || 'M1';
+    const radio = document.querySelector(`input[name="metodologia"][value="${met}"]`);
+    if (radio) radio.checked = true;
+    switchMetodologia(met);
+
+    // Restaurar IPCA
+    if (met === 'M3' && existingIpcaPercentual !== null && existingIpcaPercentual !== undefined) {
+      if (ipcaInput) {
+        ipcaInput.value = formatBRL(existingIpcaPercentual);
+        updateIPCAValor();
+      }
+    }
   };
 })();
