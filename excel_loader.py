@@ -1,11 +1,9 @@
 import os
 import openpyxl
-from database import get_db, count_assets
+from database import get_db
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PLANILHAS_DIR = os.path.join(BASE_DIR, 'planilhas_excel')
-
-DATA_START_ROW = 8
 
 # Colunas (índice 1-based conforme planilha)
 COL_NATUREZA   = 1
@@ -19,15 +17,24 @@ COL_VAL_CONT   = 8
 COL_VAL_ATUAL  = 9
 
 
+def _find_data_start(ws):
+    """Detecta a primeira linha de dados buscando a linha de cabeçalho que contém 'NRP'."""
+    for i, row in enumerate(ws.iter_rows(min_row=1, max_row=20, values_only=True), start=1):
+        for cell in row:
+            if cell is not None and 'NRP' in str(cell).upper():
+                return i + 1  # dados começam na linha seguinte ao cabeçalho
+    return 8  # fallback conservador
+
 
 def _rows_from_workbook(path):
-    """Abre o arquivo xlsx e retorna lista de tuplas (row_index, values_tuple)."""
+    """Abre o xlsx e retorna lista de tuplas (row_index, values_tuple)."""
     wb = openpyxl.load_workbook(path, data_only=True, read_only=True)
     ws = wb.active
+    data_start = _find_data_start(ws)
     result = []
     for row_idx, row in enumerate(
-        ws.iter_rows(min_row=DATA_START_ROW, values_only=True),
-        start=DATA_START_ROW,
+        ws.iter_rows(min_row=data_start, values_only=True),
+        start=data_start,
     ):
         nrp = _normalize(row[COL_NRP - 1])
         if not nrp:
@@ -57,11 +64,18 @@ def _to_float(v):
         return None
 
 
-def load_excel_files():
-    """Importa todas as planilhas para o banco. Idempotente: não executa se já houver dados."""
-    if count_assets() > 0:
-        return
+def _count_for_planilha(conn, planilha):
+    return conn.execute(
+        "SELECT COUNT(*) FROM assets WHERE planilha = ?", (planilha,)
+    ).fetchone()[0]
 
+
+def load_excel_files():
+    """
+    Importa todas as planilhas para o banco.
+    Idempotente por planilha: planilhas já importadas são ignoradas.
+    Usa INSERT OR IGNORE para tolerar re-execuções parciais.
+    """
     total = 0
     for fname in sorted(os.listdir(PLANILHAS_DIR)):
         if not fname.lower().endswith('.xlsx'):
@@ -69,19 +83,28 @@ def load_excel_files():
         path = os.path.join(PLANILHAS_DIR, fname)
         planilha = os.path.splitext(fname)[0]
 
-        # 1) Lê o arquivo Excel (sem conexão de banco aberta)
+        conn = get_db()
+        if _count_for_planilha(conn, planilha) > 0:
+            conn.close()
+            continue  # planilha já importada
+
+        # Lê o arquivo Excel (sem conexão de banco aberta)
+        conn.close()
         try:
             rows = _rows_from_workbook(path)
         except Exception as e:
             print(f"Erro ao ler {fname}: {e}")
             continue
 
-        # 2) Insere no banco e commita (uma transação por planilha)
+        if not rows:
+            print(f"  {fname}: sem dados")
+            continue
+
         conn = get_db()
         count_file = 0
         for row_idx, row in rows:
             conn.execute("""
-                INSERT INTO assets
+                INSERT OR IGNORE INTO assets
                     (planilha, row_index, natureza_despesa, material, nrp, tipo,
                      marca, modelo, data_tombamento, valor_contabil, valor_atual)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -104,5 +127,6 @@ def load_excel_files():
         total += count_file
         print(f"  {fname}: {count_file} bens")
 
-    print(f"Importação concluída: {total} bens carregados.")
+    if total:
+        print(f"Importação concluída: {total} bens carregados.")
     return total
