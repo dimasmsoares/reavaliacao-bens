@@ -194,13 +194,23 @@ def admin_distribuir():
                 count = db.assign_by_planilha(planilha, user_id)
                 flash(f'{count} bens de "{planilha_curta_filter(planilha)}" '
                       f'atribuídos a {user["name"]}.', 'success')
-        elif mode == 'quantidade':
-            n = request.form.get('quantidade', type=int, default=0)
-            if n <= 0:
-                flash('Informe uma quantidade válida (maior que zero).', 'warning')
+        elif mode == 'grupos_unicos':
+            planilha = request.form.get('planilha', '').strip()
+            n = request.form.get('n_grupos', type=int, default=0)
+            if not planilha:
+                flash('Selecione uma planilha.', 'warning')
+            elif n <= 0:
+                flash('Informe uma quantidade de grupos maior que zero.', 'warning')
             else:
-                count = db.assign_by_quantity(n, user_id)
-                flash(f'{count} bens atribuídos a {user["name"]}.', 'success')
+                assets_count, groups_count = db.assign_by_unique_groups(planilha, n, user_id)
+                if assets_count == 0:
+                    flash(f'Nenhum grupo disponível em "{planilha_curta_filter(planilha)}" para distribuir.', 'warning')
+                else:
+                    flash(
+                        f'{assets_count} bem(ns) em {groups_count} grupo(s) único(s) de '
+                        f'"{planilha_curta_filter(planilha)}" atribuídos a {user["name"]}.',
+                        'success'
+                    )
         elif mode == 'redistribuir':
             from_user_id = request.form.get('from_user_id', type=int)
             from_user = db.get_user_by_id(from_user_id) if from_user_id else None

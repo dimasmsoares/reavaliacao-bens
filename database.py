@@ -216,6 +216,65 @@ def assign_by_quantity(n, user_id):
     return len(ids)
 
 
+def assign_by_unique_groups(planilha, n_groups, user_id):
+    """
+    Atribui N grupos únicos (tipo+material+marca+modelo) de uma planilha ao servidor.
+    Só seleciona grupos onde nenhum ativo ainda foi atribuído.
+    Retorna (total_assets_assigned, groups_assigned).
+    """
+    now = datetime.utcnow().isoformat()
+    conn = get_db()
+
+    # Grupos completos (material+marca+modelo preenchidos) ainda não atribuídos
+    complete_groups = conn.execute("""
+        SELECT COALESCE(tipo,'') AS t, material, marca, modelo
+        FROM assets
+        WHERE planilha = ?
+          AND material IS NOT NULL AND marca IS NOT NULL AND modelo IS NOT NULL
+        GROUP BY COALESCE(tipo,''), material, marca, modelo
+        HAVING SUM(CASE WHEN id IN (SELECT asset_id FROM assignments) THEN 1 ELSE 0 END) = 0
+        ORDER BY MIN(row_index)
+        LIMIT ?
+    """, (planilha, n_groups)).fetchall()
+
+    assets_assigned = 0
+    groups_assigned = 0
+
+    for g in complete_groups:
+        conn.execute("""
+            INSERT OR IGNORE INTO assignments (asset_id, user_id, assigned_at)
+            SELECT id, ?, ? FROM assets
+            WHERE planilha = ?
+              AND COALESCE(tipo,'') = ? AND material = ? AND marca = ? AND modelo = ?
+        """, (user_id, now, planilha, g['t'], g['material'], g['marca'], g['modelo']))
+        n = conn.execute("SELECT changes()").fetchone()[0]
+        assets_assigned += n
+        groups_assigned += 1
+
+    # Ativos individuais (sem material/marca/modelo completo) — cada um é seu próprio grupo
+    remaining = n_groups - groups_assigned
+    if remaining > 0:
+        individuals = conn.execute("""
+            SELECT id FROM assets
+            WHERE planilha = ?
+              AND (material IS NULL OR marca IS NULL OR modelo IS NULL)
+              AND id NOT IN (SELECT asset_id FROM assignments)
+            ORDER BY row_index
+            LIMIT ?
+        """, (planilha, remaining)).fetchall()
+        for a in individuals:
+            conn.execute(
+                "INSERT OR IGNORE INTO assignments (asset_id, user_id, assigned_at) VALUES (?,?,?)",
+                (a['id'], user_id, now)
+            )
+            assets_assigned += 1
+            groups_assigned += 1
+
+    conn.commit()
+    conn.close()
+    return assets_assigned, groups_assigned
+
+
 def reassign_pending(from_user_id, to_user_id):
     """Move bens não avaliados de um servidor para outro."""
     now = datetime.utcnow().isoformat()

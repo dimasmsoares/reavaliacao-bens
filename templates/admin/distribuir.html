@@ -67,20 +67,40 @@
     </div>
   </div>
 
-  <!-- Por quantidade -->
+  <!-- Por grupos únicos -->
   <div class="col-md-4">
     <div class="card border-0 shadow-sm h-100">
       <div class="card-header bg-white fw-semibold border-0">
-        <i class="bi bi-123 me-1 text-primary"></i> Por Quantidade
+        <i class="bi bi-layers me-1 text-primary"></i> Por Grupos Únicos
       </div>
       <div class="card-body">
+        <p class="text-muted small mb-3">
+          Atribui N grupos únicos de uma planilha. Cada grupo
+          (mesmo tipo+material+marca+modelo) conta como 1, mas todos
+          os bens do grupo são distribuídos juntos.
+        </p>
         <form method="post">
-          <input type="hidden" name="mode" value="quantidade">
+          <input type="hidden" name="mode" value="grupos_unicos">
           <div class="mb-3">
-            <label class="form-label">Quantidade de bens</label>
-            <input type="number" name="quantidade" class="form-control"
-                   min="1" required placeholder="ex: 500">
-            <div class="form-text">Pega os primeiros N bens não atribuídos.</div>
+            <label class="form-label">Planilha</label>
+            <select name="planilha" id="gu-planilha" class="form-select" required>
+              <option value="">Selecione…</option>
+              {% for p in planilhas %}
+              {% set unicos = unique_unassigned.get(p, 0) %}
+              <option value="{{ p }}" data-unicos="{{ unicos }}">
+                {{ p | planilha_curta }}
+                {% if unicos > 0 %}({{ unicos }} disponíveis){% else %}(sem grupos livres){% endif %}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label d-flex justify-content-between">
+              <span>Grupos únicos a atribuir</span>
+              <span id="gu-disp" class="text-muted small"></span>
+            </label>
+            <input type="number" name="n_grupos" id="gu-n" class="form-control"
+                   min="1" required placeholder="ex: 50">
           </div>
           <div class="mb-3">
             <label class="form-label">Servidor</label>
@@ -92,7 +112,7 @@
             </select>
           </div>
           <button class="btn btn-primary w-100 fw-semibold">
-            <i class="bi bi-send me-1"></i> Atribuir quantidade
+            <i class="bi bi-layers me-1"></i> Atribuir grupos
           </button>
         </form>
       </div>
@@ -176,4 +196,28 @@
   </div>
 </div>
 {% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const sel  = document.getElementById('gu-planilha');
+  const inp  = document.getElementById('gu-n');
+  const disp = document.getElementById('gu-disp');
+  if (!sel) return;
+
+  function update() {
+    const opt    = sel.options[sel.selectedIndex];
+    const unicos = parseInt(opt ? opt.dataset.unicos || '0' : '0');
+    inp.max = unicos || '';
+    disp.textContent = unicos > 0
+      ? `máx. ${unicos}`
+      : (sel.value ? 'nenhum disponível' : '');
+    disp.className = unicos > 0 ? 'text-muted small' : 'text-danger small';
+  }
+
+  sel.addEventListener('change', update);
+  update();
+})();
+</script>
 {% endblock %}
