@@ -185,6 +185,30 @@ def admin_editar_usuario(user_id):
 def admin_distribuir():
     if request.method == 'POST':
         mode = request.form.get('mode')
+
+        if mode == 'balanceada':
+            user_ids = request.form.getlist('user_ids', type=int)
+            valid_ids = [u['id'] for u in db.get_all_users() if u['role'] == 'servidor']
+            user_ids = [uid for uid in user_ids if uid in valid_ids]
+            if len(user_ids) < 2:
+                flash('Selecione ao menos 2 servidores para a distribuição balanceada.', 'warning')
+            else:
+                db.clear_pending_assignments()
+                load = db.assign_balanced_spread(user_ids)
+                users_by_id = {u['id']: u['name'] for u in db.get_all_users()}
+                resumo = ', '.join(
+                    f"{users_by_id[uid]}: {load[uid]['groups']} grupos / {load[uid]['assets']} bens"
+                    for uid in user_ids
+                )
+                flash(f'Distribuição balanceada concluída entre {len(user_ids)} servidores. {resumo}.', 'success')
+            return redirect(url_for('admin_distribuir'))
+
+        if mode == 'desfazer_distribuicao':
+            count = db.clear_pending_assignments()
+            flash(f'Distribuição desfeita: {count} bem(ns) pendente(s) voltaram a "não atribuído". '
+                  f'Bens já avaliados não foram alterados.', 'success')
+            return redirect(url_for('admin_distribuir'))
+
         user_id = request.form.get('user_id', type=int)
         user = db.get_user_by_id(user_id) if user_id else None
         if not user or user['role'] != 'servidor':

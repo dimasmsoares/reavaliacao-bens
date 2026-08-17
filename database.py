@@ -64,6 +64,9 @@ def init_db():
             justificativa  TEXT,
             created_at     TEXT NOT NULL
         );
+
+        CREATE INDEX IF NOT EXISTS idx_assets_group
+            ON assets (planilha, tipo, material, marca, modelo);
     """)
     conn.commit()
     # Migração: adiciona colunas novas se ainda não existirem
@@ -279,6 +282,80 @@ def assign_by_unique_groups(planilha, n_groups, user_id):
     conn.commit()
     conn.close()
     return assets_assigned, groups_assigned
+
+
+def clear_pending_assignments():
+    """Remove atribuições de bens ainda não avaliados (preserva as de bens já avaliados)."""
+    conn = get_db()
+    conn.execute("""
+        DELETE FROM assignments
+        WHERE asset_id NOT IN (SELECT asset_id FROM reviews)
+    """)
+    count = conn.execute("SELECT changes()").fetchone()[0]
+    conn.commit()
+    conn.close()
+    return count
+
+
+def assign_balanced_spread(user_ids):
+    """
+    Redistribui todos os bens pendentes (sem review) entre os servidores em user_ids,
+    balanceando por número de grupos (tipo+material+marca+modelo) — a unidade real de
+    esforço, já que avaliar 1 bem do grupo propaga para os demais do mesmo grupo.
+    Processa os grupos em ordem decrescente de tamanho, atribuindo cada um ao servidor
+    com menos grupos no momento, o que espalha os grupos gigantes entre servidores
+    diferentes antes de nivelar o restante entre todos.
+    Retorna {user_id: {"groups": n, "assets": n}}.
+    """
+    now = datetime.utcnow().isoformat()
+    conn = get_db()
+
+    complete_groups = conn.execute("""
+        SELECT planilha, COALESCE(tipo,'') AS t, material, marca, modelo, COUNT(*) AS n
+        FROM assets
+        WHERE material IS NOT NULL AND marca IS NOT NULL AND modelo IS NOT NULL
+          AND id NOT IN (SELECT asset_id FROM reviews)
+        GROUP BY planilha, COALESCE(tipo,''), material, marca, modelo
+        ORDER BY n DESC
+    """).fetchall()
+
+    individuals = conn.execute("""
+        SELECT id FROM assets
+        WHERE (material IS NULL OR marca IS NULL OR modelo IS NULL)
+          AND id NOT IN (SELECT asset_id FROM reviews)
+    """).fetchall()
+
+    load = {uid: {"groups": 0, "assets": 0} for uid in user_ids}
+
+    def least_loaded():
+        return min(user_ids, key=lambda u: (load[u]["groups"], load[u]["assets"]))
+
+    inserts = []
+    for g in complete_groups:
+        uid = least_loaded()
+        rows = conn.execute("""
+            SELECT id FROM assets
+            WHERE planilha = ? AND COALESCE(tipo,'') = ? AND material = ? AND marca = ? AND modelo = ?
+              AND id NOT IN (SELECT asset_id FROM reviews)
+        """, (g['planilha'], g['t'], g['material'], g['marca'], g['modelo'])).fetchall()
+        for a in rows:
+            inserts.append((a['id'], uid, now))
+        load[uid]["groups"] += 1
+        load[uid]["assets"] += len(rows)
+
+    for a in individuals:
+        uid = least_loaded()
+        inserts.append((a['id'], uid, now))
+        load[uid]["groups"] += 1
+        load[uid]["assets"] += 1
+
+    conn.executemany(
+        "INSERT OR IGNORE INTO assignments (asset_id, user_id, assigned_at) VALUES (?,?,?)",
+        inserts
+    )
+    conn.commit()
+    conn.close()
+    return load
 
 
 def reassign_pending(from_user_id, to_user_id):

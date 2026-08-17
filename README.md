@@ -60,15 +60,17 @@ Acesse **Servidores** no menu superior e crie um login para cada servidor que pa
 
 #### 2. Distribuir os Bens
 
-Acesse **Distribuir** no menu superior. Existem três formas de atribuir bens:
+Acesse **Distribuir** no menu superior. Existem estas formas de atribuir ou desfazer a distribuição:
 
 | Modalidade | Quando usar |
 |---|---|
 | **Por planilha** | Designa uma categoria inteira a um servidor específico |
 | **Por grupos únicos** | Atribui N grupos únicos de uma planilha. Cada grupo (mesmo tipo+material+marca+modelo) conta como 1, mas todos os bens do grupo são distribuídos juntos |
+| **Desfazer distribuição** | Remove de uma vez todas as atribuições de bens ainda não avaliados, de todos os servidores e planilhas, voltando-os ao estado "não atribuído" |
+| **Distribuição balanceada** | Redistribui de uma vez todos os bens ainda não avaliados (de todas as planilhas) entre os servidores marcados, equilibrando pelo número de grupos. Os grupos maiores são espalhados um por servidor antes de nivelar o restante, evitando que um único servidor concentre vários grupos gigantes |
 | **Redistribuir** | Move os bens ainda não avaliados de um servidor para outro (ex: licença) |
 
-> Os bens já avaliados não são afetados pela redistribuição.
+> Os bens já avaliados não são afetados por nenhuma dessas ações.
 
 #### 3. Acompanhar o Andamento
 

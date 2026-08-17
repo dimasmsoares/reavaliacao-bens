@@ -47,10 +47,12 @@ O banco `reavaliacao.db` e os screenshots são gerados automaticamente na raiz d
 - `audit_log`: registro de ações administrativas sensíveis (desfazer avaliações). Campos: `action`, `asset_id`, `admin_id`, `target_user_id`, `justificativa`, `created_at`. Ao desfazer um grupo, cada bem removido gera uma entrada separada.
 
 ### Agrupamento de bens
-A chave de grupo é `COALESCE(tipo,'') || '~~' || material || '~~' || marca || '~~' || modelo`. Bens principais (tipo IS NULL) e agregações (tipo = 'Agregação') são grupos separados mesmo com mesmo material+marca+modelo. Todas as queries de propagação, contagem única e distribuição usam `COALESCE(tipo,'')` para respeitar essa separação.
+A chave de grupo é `COALESCE(tipo,'') || '~~' || material || '~~' || marca || '~~' || modelo`. Bens principais (tipo IS NULL) e agregações (tipo = 'Agregação') são grupos separados mesmo com mesmo material+marca+modelo. Todas as queries de propagação, contagem única e distribuição usam `COALESCE(tipo,'')` para respeitar essa separação. Índice `idx_assets_group (planilha, tipo, material, marca, modelo)` acelera essas queries de agrupamento.
 
 ### Distribuição
-`assign_by_unique_groups(planilha, n_grupos, user_id)`: seleciona N grupos únicos ainda não atribuídos de uma planilha e atribui todos os bens de cada grupo ao servidor. Garante que nenhum grupo seja dividido entre servidores.
+- `assign_by_unique_groups(planilha, n_grupos, user_id)`: seleciona N grupos únicos ainda não atribuídos de uma planilha e atribui todos os bens de cada grupo ao servidor. Garante que nenhum grupo seja dividido entre servidores.
+- `assign_balanced_spread(user_ids)`: redistribui **todos** os bens pendentes (sem review, de qualquer planilha) entre os servidores em `user_ids`. Como avaliar 1 bem de um grupo propaga para os demais do mesmo grupo, a unidade real de esforço é o grupo, não o bem — a função ordena todos os grupos por tamanho decrescente e atribui cada um ao servidor com menos grupos no momento. Isso espalha os grupos gigantes (centenas/milhares de bens idênticos) entre servidores diferentes antes de nivelar o restante. Acionado pelo botão "Distribuição Balanceada" em `/admin/distribuir` (modo `balanceada`).
+- `clear_pending_assignments()`: remove as atribuições de bens ainda **não avaliados** (preserva as de bens já avaliados). Usado internamente por `assign_balanced_spread` e exposto sozinho pelo botão "Desfazer Distribuição" em `/admin/distribuir` (modo `desfazer_distribuicao`), que zera toda a distribuição pendente sem tocar em avaliações já feitas.
 
 ### Metodologias de avaliação
 - **M1 – Pesquisa de mercado**: servidor registra preços + prints; valor = média (editável).
