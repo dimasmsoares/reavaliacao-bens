@@ -101,6 +101,7 @@
           {% if asset.tipo %}<div class="col-auto"><b>Tipo:</b> {{ asset.tipo }}</div>{% endif %}
           {% if asset.data_tombamento %}<div class="col-auto"><b>Tombamento:</b> {{ asset.data_tombamento }}</div>{% endif %}
           {% if asset.valor_contabil %}<div class="col-auto"><b>Valor Contábil:</b> {{ asset.valor_contabil | brl }}</div>{% endif %}
+          {% if asset.valor_atual %}<div class="col-auto"><b>Valor Atual:</b> {{ asset.valor_atual | brl }}</div>{% endif %}
           {% if asset.natureza_despesa %}<div class="col-auto"><b>ND:</b> {{ asset.natureza_despesa }}</div>{% endif %}
         </div>
       </div>

@@ -32,7 +32,7 @@ O banco `reavaliacao.db` e os screenshots são gerados automaticamente na raiz d
 
 ### Banco de dados (SQLite WAL)
 - `users`: admin + servidores com senha hash (werkzeug)
-- `assets`: 54.430 bens importados das planilhas (somente leitura lógica). Campos relevantes: `tipo TEXT` (NULL = bem principal, "Agregação" = agregação), `material`, `marca`, `modelo`, `data_tombamento TEXT` (formato `dd/mm/yyyy`), `valor_contabil REAL`.
+- `assets`: 54.430 bens importados das planilhas (somente leitura lógica). Campos relevantes: `tipo TEXT` (NULL = bem principal, "Agregação" = agregação), `material`, `marca`, `modelo`, `data_tombamento TEXT` (formato `dd/mm/yyyy`), `valor_contabil REAL`, `valor_atual REAL`.
 - `assignments`: mapeamento servidor → bem (admin distribui)
 - `reviews`: resultado da avaliação, indexado por `asset_id` (UNIQUE). Colunas adicionadas progressivamente via `ALTER TABLE` em `init_db()`:
   - `valor_mercado REAL` — valor final registrado
