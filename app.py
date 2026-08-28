@@ -521,7 +521,7 @@ def admin_excluir_usuario(user_id):
         flash('Servidor não encontrado.', 'danger')
         return redirect(url_for('admin_usuarios'))
     db.delete_user(user_id)
-    flash(f'Servidor "{user["name"]}" excluído. Os bens foram liberados para redistribuição.', 'success')
+    flash(f'Servidor "{user["name"]}" excluído. Os bens avaliados por ele voltaram a pendentes e foram liberados para redistribuição.', 'success')
     return redirect(url_for('admin_usuarios'))
 
 

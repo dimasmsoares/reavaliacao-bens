@@ -561,9 +561,10 @@ def delete_review_single(asset_id):
 
 
 def delete_user(user_id):
-    """Remove o servidor: preserva reviews (user_id → NULL), libera assignments, apaga o user."""
+    """Remove o servidor: apaga as avaliações feitas por ele (bens voltam a pendentes),
+    libera assignments e apaga o user."""
     conn = get_db()
-    conn.execute("UPDATE reviews SET user_id = NULL WHERE user_id = ?", (user_id,))
+    conn.execute("DELETE FROM reviews WHERE user_id = ?", (user_id,))
     conn.execute("DELETE FROM assignments WHERE user_id = ?", (user_id,))
     conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
     conn.commit()
