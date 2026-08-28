@@ -5,7 +5,7 @@ import base64
 import functools
 from datetime import datetime, date
 from flask import (Flask, render_template, request, session, redirect,
-                   url_for, flash, jsonify, send_from_directory)
+                   url_for, flash, jsonify, send_from_directory, send_file)
 from werkzeug.security import generate_password_hash, check_password_hash
 from PIL import Image
 import io
@@ -16,6 +16,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 import database as db
 from excel_loader import load_excel_files
 from excel_exporter import export_all
+from pdf_report import generate_pdf_report
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SCREENSHOTS_DIR = os.path.join(BASE_DIR, 'screenshots')
@@ -133,6 +134,15 @@ def admin_export():
     else:
         flash('Nenhum bem foi avaliado ainda. Nada a exportar.', 'warning')
     return redirect(url_for('admin_dashboard'))
+
+
+@app.route('/admin/export/pdf', methods=['POST'])
+@admin_required
+def admin_export_pdf():
+    pdf_bytes = generate_pdf_report()
+    filename = f"relatorio_bens_avaliados_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+    return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf',
+                      as_attachment=True, download_name=filename)
 
 
 # ── Admin — Servidores ───────────────────────────────────────────────────────
@@ -506,6 +516,20 @@ def admin_usuario_bens(user_id):
     }
     return render_template('admin/usuario_bens.html', user=user, assets=assets,
                            group_reviewed_counts=group_reviewed_counts)
+
+
+@app.route('/admin/usuarios/<int:user_id>/export/pdf', methods=['POST'])
+@admin_required
+def admin_usuario_export_pdf(user_id):
+    user = db.get_user_by_id(user_id)
+    if not user or user['role'] != 'servidor':
+        flash('Servidor não encontrado.', 'danger')
+        return redirect(url_for('admin_usuarios'))
+    pdf_bytes = generate_pdf_report(user_id=user_id, user_name=user['name'])
+    safe_name = re.sub(r'[^\w\-]+', '_', user['name'])
+    filename = f"relatorio_{safe_name}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+    return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf',
+                      as_attachment=True, download_name=filename)
 
 
 # ── Admin — Excluir servidor ─────────────────────────────────────────────────

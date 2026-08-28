@@ -24,11 +24,12 @@ O banco `reavaliacao.db` e os screenshots são gerados automaticamente na raiz d
 
 ## Arquitetura
 
-### Backend (`app.py`, `database.py`, `excel_loader.py`, `excel_exporter.py`)
+### Backend (`app.py`, `database.py`, `excel_loader.py`, `excel_exporter.py`, `pdf_report.py`)
 - **`app.py`**: Flask app com rotas de autenticação, admin e servidor. Na inicialização: cria banco, admin padrão e importa as planilhas (idempotente). Usa `requests as http_requests` com `verify=False` para a API do BCB (proxy SSL corporativo). Importa `date` de `datetime` para o endpoint `/api/ipca`.
-- **`database.py`**: Todas as operações SQLite. Funções nomeadas por entidade (`get_user_*`, `assign_*`, `get_*_progress`, etc.). Funções de remoção de avaliação: `delete_review(asset_id, user_id)` — cascata no grupo do servidor; `delete_review_single(asset_id)` — só este bem; `admin_delete_review(...)` — admin, bem único + audit_log; `admin_delete_review_group(...)` — admin, grupo inteiro + audit_log por bem. `get_group_reviewed_count(asset_id, user_id)` retorna quantas avaliações existem no grupo daquele servidor.
+- **`database.py`**: Todas as operações SQLite. Funções nomeadas por entidade (`get_user_*`, `assign_*`, `get_*_progress`, etc.). Funções de remoção de avaliação: `delete_review(asset_id, user_id)` — cascata no grupo do servidor; `delete_review_single(asset_id)` — só este bem; `admin_delete_review(...)` — admin, bem único + audit_log; `admin_delete_review_group(...)` — admin, grupo inteiro + audit_log por bem. `get_group_reviewed_count(asset_id, user_id)` retorna quantas avaliações existem no grupo daquele servidor. `delete_user(user_id)` apaga também as reviews feitas pelo servidor removido (bens voltam a pendentes), além de liberar assignments. `get_reviews_for_report(user_id=None)` retorna os bens avaliados (com dados do bem, da avaliação e do avaliador) para o relatório PDF; `user_id=None` traz todos, informado restringe a um servidor.
 - **`excel_loader.py`**: Lê cada `.xlsx` com `openpyxl`. Detecta dinamicamente a linha de cabeçalho via `_find_data_start()` (busca "NRP" nas primeiras 20 linhas; fallback = 8). Commita por planilha para ser resiliente a interrupções.
 - **`excel_exporter.py`**: Copia os `.xlsx` originais para `output/` e preenche a coluna 10 (VMB) e coluna 11 (metodologia: `M1`/`M2`/`M3`).
+- **`pdf_report.py`**: Gera o relatório PDF (`reportlab`) dos bens já avaliados via `generate_pdf_report(user_id=None, user_name=None)`. Agrupa em uma única entrada os bens com mesma assinatura de avaliação (planilha+tipo+material+marca+modelo + mesmos `valor_mercado`/`metodologia`/`ipca_percentual`/`observacao`/`screenshot_paths`/`user_id`), listando os NRPs incluídos. Cada entrada mostra metodologia, valor de mercado, avaliador, data, observação (se houver) e as imagens (lidas de `SCREENSHOTS_DIR`).
 
 ### Banco de dados (SQLite WAL)
 - `users`: admin + servidores com senha hash (werkzeug)
@@ -77,6 +78,8 @@ Os valores de `valor_contabil` e `data_tombamento` são passados via atributos `
 ### API endpoints relevantes
 - `GET /api/ipca?data_inicio=dd/mm/yyyy` — retorna `{"acumulado": 48.52}` (IPCA % acumulado desde a data até hoje). Usa `requests.get(..., verify=False)` por causa do proxy SSL da rede corporativa.
 - `GET /screenshots/<path>` — serve screenshots salvos.
+- `POST /admin/export/pdf` — gera e baixa o relatório PDF global (todos os servidores).
+- `POST /admin/usuarios/<user_id>/export/pdf` — gera e baixa o relatório PDF restrito a um servidor.
 
 ### Fluxo principal
 1. Admin cria servidores (`/admin/usuarios`) e distribui bens (`/admin/distribuir`) por planilha, grupos únicos ou redistribuição.
@@ -84,6 +87,7 @@ Os valores de `valor_contabil` e `data_tombamento` são passados via atributos `
 3. Ao salvar: `save_review()` propaga automaticamente para todos os bens com mesmo `tipo+material+marca+modelo` sem review (`INSERT OR IGNORE`), persistindo também `metodologia` e `ipca_percentual`.
 4. Admin acompanha via dashboard e pode desfazer avaliações com justificativa (`audit_log`). Ao desfazer, se o bem pertence a um grupo com múltiplos similares avaliados, o modal oferece checkbox para reverter o grupo inteiro (cada bem gera entrada no `audit_log`). O servidor também pode desfazer pela tela de avaliação, com escolha entre "só este bem" ou "todos os similares".
 5. Admin exporta resultados em `/admin/export` → gera `output/<planilha>_avaliado_<data>.xlsx` com colunas VMB (10) e metodologia (11) preenchidas.
+6. Admin gera relatório PDF dos bens avaliados (botão "Exportar PDF" no dashboard ou na tela de bens de um servidor) → `pdf_report.generate_pdf_report()`.
 
 ## Arquivos de dados
 - `planilhas_excel/`: 9 planilhas xlsx com os bens (NUNCA modificar)

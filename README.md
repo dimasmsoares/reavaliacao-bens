@@ -91,6 +91,14 @@ Clique em **Exportar Excel** no Dashboard. O sistema gera cópias das planilhas 
 - Coluna 10 (VMB) preenchida com o valor de mercado
 - Coluna 11 com a metodologia utilizada (`M1`, `M2` ou `M3`)
 
+#### 6. Exportar Relatório em PDF
+
+O botão **Exportar PDF** gera um relatório com os bens já avaliados, disponível em dois níveis:
+- **Dashboard**: relatório global, com os bens avaliados por todos os servidores.
+- **Tela de bens de um servidor**: relatório restrito às avaliações daquele servidor.
+
+Bens idênticos avaliados em grupo (mesmo tipo+material+marca+modelo e mesmos dados de avaliação) aparecem como uma única entrada no relatório, listando os NRPs incluídos. Para cada entrada são exibidos: metodologia utilizada, valor de mercado, observação (se houver) e as imagens (prints) anexadas.
+
 ---
 
 ### Perfil Servidor
@@ -168,6 +176,7 @@ reavaliacao_bens/
 ├── database.py             # Operações do banco de dados SQLite
 ├── excel_loader.py         # Importação das planilhas para o banco
 ├── excel_exporter.py       # Exportação dos resultados para Excel
+├── pdf_report.py           # Geração do relatório PDF dos bens avaliados
 ├── requirements.txt        # Dependências Python
 │
 ├── planilhas_excel/        # Planilhas originais (NUNCA modificar)
@@ -205,6 +214,7 @@ reavaliacao_bens/
 | Banco de dados | SQLite (modo WAL) |
 | Leitura/escrita de Excel | openpyxl |
 | Processamento de imagens | Pillow |
+| Geração de PDF | reportlab |
 | Busca de IPCA | requests → API Banco Central (série 433) |
 | Interface | Bootstrap 5 + JavaScript puro |
 | Autenticação | Sessão server-side + hash werkzeug |
@@ -234,4 +244,5 @@ flask       — framework web
 openpyxl    — leitura e escrita de arquivos .xlsx
 pillow      — processamento das imagens de comprovante
 requests    — consulta à API do Banco Central (IPCA)
+reportlab   — geração dos relatórios em PDF
 ```

@@ -712,3 +712,48 @@ def get_progress_by_planilha():
     """).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+def get_reviews_for_report(user_id=None):
+    """Bens já avaliados (com dados do bem, da avaliação e do avaliador),
+    para geração do relatório PDF. Se user_id for informado, restringe às
+    avaliações feitas por aquele servidor."""
+    conn = get_db()
+    if user_id is None:
+        rows = conn.execute("""
+            SELECT a.nrp, a.planilha, a.material, a.marca, a.modelo, a.tipo,
+                   r.valor_mercado, r.metodologia, r.ipca_percentual, r.observacao,
+                   r.screenshot_path, r.screenshot_paths, r.user_id, r.updated_at,
+                   u.name AS avaliador
+            FROM reviews r
+            JOIN assets a ON a.id = r.asset_id
+            LEFT JOIN users u ON u.id = r.user_id
+            ORDER BY a.planilha, a.material, a.marca, a.modelo, r.updated_at
+        """).fetchall()
+    else:
+        rows = conn.execute("""
+            SELECT a.nrp, a.planilha, a.material, a.marca, a.modelo, a.tipo,
+                   r.valor_mercado, r.metodologia, r.ipca_percentual, r.observacao,
+                   r.screenshot_path, r.screenshot_paths, r.user_id, r.updated_at,
+                   u.name AS avaliador
+            FROM reviews r
+            JOIN assets a ON a.id = r.asset_id
+            LEFT JOIN users u ON u.id = r.user_id
+            WHERE r.user_id = ?
+            ORDER BY a.planilha, a.material, a.marca, a.modelo, r.updated_at
+        """, (user_id,)).fetchall()
+    conn.close()
+
+    result = []
+    for r in rows:
+        d = dict(r)
+        raw_paths = d.pop('screenshot_paths')
+        single_path = d.pop('screenshot_path')
+        if raw_paths:
+            d['screenshot_paths'] = json.loads(raw_paths)
+        elif single_path:
+            d['screenshot_paths'] = [single_path]
+        else:
+            d['screenshot_paths'] = []
+        result.append(d)
+    return result
