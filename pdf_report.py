@@ -22,8 +22,12 @@ METODOLOGIA_LABELS = {
     'M3': 'M3 – Correção IPCA',
 }
 
-IMAGES_PER_ROW = 4
-IMG_SIZE = 4.2 * cm
+PAGE_MARGIN = 1.5 * cm
+USABLE_WIDTH = A4[0] - 2 * PAGE_MARGIN
+
+IMAGES_PER_ROW = 2
+IMG_GAP = 0.3 * cm
+IMG_SIZE = (USABLE_WIDTH - (IMAGES_PER_ROW - 1) * IMG_GAP) / IMAGES_PER_ROW
 
 
 def _strip_codigo(material):
@@ -112,9 +116,10 @@ def _image_grid(paths):
     table = Table(rows, hAlign='LEFT')
     table.setStyle(TableStyle([
         ('LEFTPADDING', (0, 0), (-1, -1), 0),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
-        ('TOPPADDING', (0, 0), (-1, -1), 3),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ('RIGHTPADDING', (0, 0), (-2, -1), IMG_GAP),
+        ('RIGHTPADDING', (-1, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), IMG_GAP),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), IMG_GAP),
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
     ]))
     return table
@@ -176,8 +181,8 @@ def generate_pdf_report(user_id=None, user_name=None):
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer, pagesize=A4,
-        topMargin=1.5 * cm, bottomMargin=1.5 * cm,
-        leftMargin=1.5 * cm, rightMargin=1.5 * cm,
+        topMargin=PAGE_MARGIN, bottomMargin=PAGE_MARGIN,
+        leftMargin=PAGE_MARGIN, rightMargin=PAGE_MARGIN,
     )
 
     story = []
