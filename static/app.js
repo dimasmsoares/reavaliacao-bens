@@ -113,6 +113,19 @@
   }
   if (btnFetchIpca) btnFetchIpca.addEventListener('click', fetchIPCA);
 
+  // Botões de pesquisa com IA: copia o prompt para a área de transferência
+  document.querySelectorAll('.btn-ai-search').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const prompt = this.dataset.aiPrompt;
+      if (!prompt || !navigator.clipboard) return;
+      navigator.clipboard.writeText(prompt).then(() => {
+        const original = this.innerHTML;
+        this.innerHTML = '<i class="bi bi-clipboard-check me-1"></i> Prompt copiado!';
+        setTimeout(() => { this.innerHTML = original; }, 1500);
+      }).catch(() => {});
+    });
+  });
+
   // ── Valor de mercado (editável) ──────────────────────────────────────────
   let calcAvg = null;  // média calculada pelos preços
 

@@ -137,7 +137,9 @@
     </div>
 
     {# Botões de pesquisa #}
-    {% set query = ((asset.material | strip_codigo) + ((' - ' + asset.marca) if asset.marca else '') + ((' ' + asset.modelo) if asset.modelo else '')) | urlencode %}
+    {% set descricao_bem = (asset.material | strip_codigo) + ((' - ' + asset.marca) if asset.marca else '') + ((' ' + asset.modelo) if asset.modelo else '') %}
+    {% set query = descricao_bem | urlencode %}
+    {% set ai_prompt = 'Pesquise o valor médio de mercado atual no Brasil (em reais) para o seguinte bem usado, com base em anúncios reais de venda (não doação): "' + descricao_bem + '". Considere o estado de conservação típico de um bem em uso há alguns anos. Responda com uma faixa de preço e uma estimativa de valor médio em R$, citando de forma resumida em quais anúncios/fontes se baseou.' %}
     <div id="section-search-links" class="d-flex flex-wrap gap-2 mb-3">
       <a href="https://lista.mercadolivre.com.br/{{ query }}"
          target="_blank" class="btn btn-outline-warning btn-sm fw-semibold">
@@ -155,6 +157,26 @@
          target="_blank" class="btn btn-outline-danger btn-sm fw-semibold">
         <i class="bi bi-search me-1"></i> Buscapé
       </a>
+      <div class="vr mx-1 d-none d-sm-block"></div>
+      <a href="https://claude.ai/new?q={{ ai_prompt | urlencode }}"
+         target="_blank" class="btn btn-outline-secondary btn-sm fw-semibold btn-ai-search"
+         data-ai-prompt="{{ ai_prompt }}" title="Abre o Claude com o pedido de pesquisa pronto (também copiado para a área de transferência)">
+        <i class="bi bi-stars me-1"></i> Claude
+      </a>
+      <a href="https://chatgpt.com/?q={{ ai_prompt | urlencode }}"
+         target="_blank" class="btn btn-outline-secondary btn-sm fw-semibold btn-ai-search"
+         data-ai-prompt="{{ ai_prompt }}" title="Abre o ChatGPT com o pedido de pesquisa pronto (também copiado para a área de transferência)">
+        <i class="bi bi-stars me-1"></i> ChatGPT
+      </a>
+      <a href="https://gemini.google.com/app?q={{ ai_prompt | urlencode }}"
+         target="_blank" class="btn btn-outline-secondary btn-sm fw-semibold btn-ai-search"
+         data-ai-prompt="{{ ai_prompt }}" title="Abre o Gemini com o pedido de pesquisa pronto (também copiado para a área de transferência)">
+        <i class="bi bi-stars me-1"></i> Gemini
+      </a>
+    </div>
+    <div class="form-text mb-3 mt-n2">
+      <i class="bi bi-info-circle me-1"></i>
+      Os botões de IA copiam o pedido de pesquisa para a área de transferência — cole (Ctrl+V) no chat caso não venha preenchido automaticamente. Sempre confira e valide os valores sugeridos pela IA antes de usar.
     </div>
 
     {# Formulário de avaliação #}
