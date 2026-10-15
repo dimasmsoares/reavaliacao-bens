@@ -9,6 +9,7 @@ reavaliacao.db-shm
 # Dados gerados em execução
 screenshots/
 output/
+backups/
 
 # Cache Python
 __pycache__/

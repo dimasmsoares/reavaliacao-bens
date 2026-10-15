@@ -17,6 +17,7 @@ import database as db
 from excel_loader import load_excel_files
 from excel_exporter import export_all
 from pdf_report import generate_pdf_report
+from backup import run_backup
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SCREENSHOTS_DIR = os.path.join(BASE_DIR, 'screenshots')
@@ -143,6 +144,21 @@ def admin_export_pdf():
     filename = f"relatorio_bens_avaliados_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
     return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf',
                       as_attachment=True, download_name=filename)
+
+
+@app.route('/admin/backup', methods=['POST'])
+@admin_required
+def admin_backup():
+    result = run_backup()
+    if not result['success']:
+        flash(f"Falha ao gerar backup: {result['error']}", 'danger')
+    elif not result['remote_ok']:
+        flash(f"Backup local criado ({result['size_mb']:.1f} MB), mas falhou ao "
+              f"copiar para a pasta de rede. Veja backups/backup_log.txt.", 'warning')
+    else:
+        flash(f"Backup concluído com sucesso ({result['size_mb']:.1f} MB), salvo "
+              f"localmente e na pasta de rede.", 'success')
+    return redirect(url_for('admin_dashboard'))
 
 
 # ── Admin — Servidores ───────────────────────────────────────────────────────
