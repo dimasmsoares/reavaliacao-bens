@@ -36,6 +36,8 @@ IMAGES_PER_ROW = 2
 IMG_GAP = 0.3 * cm
 IMG_SIZE = (USABLE_WIDTH - (IMAGES_PER_ROW - 1) * IMG_GAP) / IMAGES_PER_ROW
 
+NRP_CHUNK = 200  # NRPs por parágrafo na lista completa (permite quebra de página)
+
 
 def _strip_codigo(material):
     if not material:
@@ -98,6 +100,8 @@ def _build_styles():
         'label': ParagraphStyle('Label', parent=styles['Normal'], fontSize=9, leading=13),
         'obs': ParagraphStyle('Obs', parent=styles['Normal'], fontSize=9, leading=13,
                                textColor=colors.HexColor('#555555')),
+        'nrps': ParagraphStyle('Nrps', parent=styles['Normal'], fontSize=8, leading=11,
+                                textColor=colors.HexColor('#444444')),
         'empty': styles['Normal'],
     }
 
@@ -141,12 +145,13 @@ def _entry_block(e, styles):
         titulo += f" — {complemento}"
     block.append(Paragraph(titulo, styles['heading']))
 
-    nrps = e['nrps']
-    nrp_txt = ', '.join(nrps[:15])
-    if len(nrps) > 15:
-        nrp_txt += f' e mais {len(nrps) - 15}'
-    qty_txt = f' <b>({len(nrps)} bens idênticos)</b>' if len(nrps) > 1 else ''
-    block.append(Paragraph(f"<b>NRP:</b> {nrp_txt}{qty_txt}", styles['label']))
+    nrps = sorted(e['nrps'], key=_nrp_sort_key)
+    if len(nrps) == 1:
+        block.append(Paragraph(f"<b>NRP:</b> {nrps[0]}", styles['label']))
+    else:
+        block.append(Paragraph(
+            f"<b>NRP:</b> {len(nrps)} bens idênticos (lista completa abaixo)", styles['label']
+        ))
     block.append(Paragraph(
         f"<b>Planilha:</b> {_planilha_curta(e['planilha'])} "
         f"&nbsp;·&nbsp; <b>Tipo:</b> {e['tipo'] or 'Principal'}",
@@ -176,10 +181,24 @@ def _entry_block(e, styles):
         block.append(Spacer(1, 0.15 * cm))
         block.append(img_table)
 
-    block.append(Spacer(1, 0.25 * cm))
-    block.append(HRFlowable(width='100%', color=colors.HexColor('#e0e0e0')))
-    block.append(Spacer(1, 0.25 * cm))
-    return block
+    # Lista completa de NRPs fica fora do KeepTogether: em grupos grandes ocupa
+    # várias páginas e precisa poder quebrar livremente.
+    tail = []
+    if len(nrps) > 1:
+        tail.append(Spacer(1, 0.15 * cm))
+        tail.append(Paragraph(f"<b>NRPs incluídos ({len(nrps)}):</b>", styles['label']))
+        for i in range(0, len(nrps), NRP_CHUNK):
+            tail.append(Paragraph(', '.join(map(str, nrps[i:i + NRP_CHUNK])), styles['nrps']))
+
+    tail.append(Spacer(1, 0.25 * cm))
+    tail.append(HRFlowable(width='100%', color=colors.HexColor('#e0e0e0')))
+    tail.append(Spacer(1, 0.25 * cm))
+    return block, tail
+
+
+def _nrp_sort_key(nrp):
+    s = str(nrp).strip()
+    return (0, int(s), '') if s.isdigit() else (1, 0, s)
 
 
 def generate_pdf_report(user_id=None, user_name=None):
@@ -217,7 +236,9 @@ def generate_pdf_report(user_id=None, user_name=None):
         story.append(Paragraph('Nenhum bem avaliado encontrado.', styles['empty']))
     else:
         for e in entries:
-            story.append(KeepTogether(_entry_block(e, styles)))
+            block, tail = _entry_block(e, styles)
+            story.append(KeepTogether(block))
+            story.extend(tail)
 
     doc.build(story)
     buffer.seek(0)
