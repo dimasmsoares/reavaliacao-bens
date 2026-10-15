@@ -81,7 +81,7 @@ O **Dashboard** (`/admin`) exibe:
 
 #### 4. Ver Bens de um Servidor
 
-Na tela **Servidores**, clique em **Bens** para ver a lista completa de bens atribuídos a um servidor, com valor de mercado, metodologia utilizada, observação e data de avaliação.
+Na tela **Servidores**, clique em **Bens** para ver a lista completa de bens atribuídos a um servidor, com valor de mercado, metodologia utilizada, referência do valor pesquisado, observação e data de avaliação.
 
 Para desfazer uma avaliação, clique no botão de desfazer e informe a justificativa. Quando o bem pertence a um grupo com vários bens similares avaliados, o modal exibe um checkbox opcional **"Desfazer também para todos os bens similares do grupo"**, permitindo reverter o grupo inteiro de uma só vez. Todas as remoções são registradas no `audit_log`.
 
@@ -89,7 +89,10 @@ Para desfazer uma avaliação, clique no botão de desfazer e informe a justific
 
 Clique em **Exportar Excel** no Dashboard. O sistema gera cópias das planilhas originais em `output/` com:
 - Coluna 10 (VMB) preenchida com o valor de mercado
-- Coluna 11 com a metodologia utilizada (`M1`, `M2` ou `M3`)
+- Coluna 19 (nova, "METODOLOGIA DE AVALIAÇÃO") com a metodologia utilizada (`M1`, `M2` ou `M3`)
+- Coluna 20 (nova, "REFERÊNCIA DO VALOR PESQUISADO") com a referência informada pelo servidor (ex.: "Novo e igual")
+
+> As demais colunas originais, inclusive a 11 (Estado de Conservação), são preservadas.
 
 #### 6. Exportar Relatório em PDF
 
@@ -97,7 +100,11 @@ O botão **Exportar PDF** gera um relatório com os bens já avaliados, disponí
 - **Dashboard**: relatório global, com os bens avaliados por todos os servidores.
 - **Tela de bens de um servidor**: relatório restrito às avaliações daquele servidor.
 
-Bens idênticos avaliados em grupo (mesmo tipo+material+marca+modelo e mesmos dados de avaliação) aparecem como uma única entrada no relatório, listando os NRPs incluídos. Para cada entrada são exibidos: metodologia utilizada, valor de mercado, observação (se houver) e as imagens (prints) anexadas.
+Bens idênticos avaliados em grupo (mesmo tipo+material+marca+modelo e mesmos dados de avaliação) aparecem como uma única entrada no relatório, listando os NRPs incluídos. Para cada entrada são exibidos: metodologia utilizada, valor de mercado, referência do valor pesquisado (se informada), observação (se houver) e as imagens (prints) anexadas.
+
+#### 7. Fazer Backup
+
+O botão **Backup Agora** no Dashboard gera imediatamente um `.zip` com o banco de dados e todos os prints, salvo em `backups/` e copiado para a pasta de rede do SEREG. Veja a seção [Backup](#backup) para o agendamento automático.
 
 ---
 
@@ -121,13 +128,14 @@ Pesquisa o bem em plataformas de e-commerce. Links de busca diretos para Mercado
 2. No campo **Preços encontrados**, registre cada valor localizado e clique em **+** (ou Enter).
 3. O **Valor de Mercado** é calculado automaticamente como a média dos preços. O valor pode ser editado manualmente se necessário.
 4. Annexe os prints da pesquisa (Ctrl+V, arrastar ou selecionar arquivo).
-5. Clique em **Salvar e Próximo**.
+5. Opcionalmente, informe a **Referência do valor pesquisado** (logo acima da observação): se o preço encontrado é de um bem **novo e igual**, **novo e similar**, **usado e igual** ou **usado e similar**.
+6. Clique em **Salvar e Próximo**.
 
 ---
 
 **M2 – Acervo patrimonial**
 
-Idêntica à M1, mas voltada para consulta em acervos patrimoniais de referência. Os botões de busca em e-commerce são ocultados.
+Idêntica à M1 (inclusive a referência do valor pesquisado), mas voltada para consulta em acervos patrimoniais de referência. Os botões de busca em e-commerce são ocultados.
 
 ---
 
@@ -139,7 +147,7 @@ Atualiza o valor contábil do bem desde a data de tombamento até hoje usando o 
 2. Clique em **Buscar IPCA** — o sistema consulta automaticamente a API do Banco Central (série 433) e preenche o percentual acumulado.
 3. O **Valor de Mercado** é calculado automaticamente: `valor_contábil × (1 + IPCA% / 100)`.
 4. Se preferir conferir manualmente, use o link **Calculadora do Banco Central**.
-5. Clique em **Salvar** (prints não são necessários nesta metodologia).
+5. Clique em **Salvar** (prints e referência do valor pesquisado não se aplicam a esta metodologia).
 
 > M3 requer que o bem possua valor contábil e data de tombamento cadastrados.
 
@@ -177,6 +185,7 @@ reavaliacao_bens/
 ├── excel_loader.py         # Importação das planilhas para o banco
 ├── excel_exporter.py       # Exportação dos resultados para Excel
 ├── pdf_report.py           # Geração do relatório PDF dos bens avaliados
+├── backup.py               # Backup do banco + prints (local e pasta de rede)
 ├── requirements.txt        # Dependências Python
 │
 ├── planilhas_excel/        # Planilhas originais (NUNCA modificar)
@@ -200,7 +209,8 @@ reavaliacao_bens/
 │
 ├── reavaliacao.db          # Banco de dados (gerado automaticamente)
 ├── screenshots/            # Prints salvos (gerado automaticamente)
-└── output/                 # Excel exportados (gerado automaticamente)
+├── output/                 # Excel exportados (gerado automaticamente)
+└── backups/                # Zips de backup + backup_log.txt (gerado automaticamente)
 ```
 
 ---
@@ -233,7 +243,24 @@ Em ambientes com proxy de inspeção SSL (ex: rede interna da Câmara), a chamad
 
 ### Backup
 
-O arquivo `reavaliacao.db` contém todos os dados do sistema. Recomenda-se fazer cópias regulares durante o processo de reavaliação.
+O arquivo `reavaliacao.db` e a pasta `screenshots/` contêm todos os dados do sistema. O script `backup.py` gera um `.zip` com um snapshot consistente do banco (seguro mesmo com o sistema em uso) e todos os prints, e:
+
+- salva em `backups/` (local) e copia para a pasta de rede do SEREG;
+- remove backups com mais de 30 dias nos dois destinos;
+- registra cada execução em `backups/backup_log.txt`.
+
+Formas de executar:
+
+- **Manual pelo sistema:** botão **Backup Agora** no Dashboard do administrador.
+- **Manual pelo terminal:** `python backup.py`
+- **Automático (diário):** agende no Agendador de Tarefas do Windows, por exemplo:
+
+```bat
+schtasks /Create /TN "Backup Reavaliacao Bens" /SC DAILY /ST 19:00 ^
+  /TR "python C:\caminho\para\reavaliacao_bens\backup.py"
+```
+
+> Se a pasta de rede estiver indisponível, o backup local é mantido e o aviso fica registrado no log.
 
 ---
 

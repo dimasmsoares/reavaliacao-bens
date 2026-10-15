@@ -16,7 +16,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 import database as db
 from excel_loader import load_excel_files
 from excel_exporter import export_all
-from pdf_report import generate_pdf_report
+from pdf_report import generate_pdf_report, REFERENCIA_PRECO_LABELS
 from backup import run_backup
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -25,6 +25,7 @@ SCREENSHOTS_DIR = os.path.join(BASE_DIR, 'screenshots')
 app = Flask(__name__)
 app.secret_key = 'reavaliacao-bens-camara-2024-chave-secreta'
 app.config['MAX_CONTENT_LENGTH'] = 20 * 1024 * 1024  # 20 MB
+app.jinja_env.globals['REFERENCIA_PRECO_LABELS'] = REFERENCIA_PRECO_LABELS
 
 
 # ── Filtros de template ──────────────────────────────────────────────────────
@@ -405,13 +406,17 @@ def avaliar_bem(asset_id):
 
         all_paths = keep_paths + new_paths
         observacao = request.form.get('observacao', '').strip() or None
+        referencia_preco = request.form.get('referencia_preco', '').strip() or None
+        if metodologia == 'M3' or referencia_preco not in REFERENCIA_PRECO_LABELS:
+            referencia_preco = None
         db.save_review(asset_id, session['user_id'], valor,
                        screenshot_path=all_paths[0] if all_paths else None,
                        prices=prices,
                        screenshot_paths=all_paths if all_paths else None,
                        observacao=observacao,
                        metodologia=metodologia,
-                       ipca_percentual=ipca_percentual)
+                       ipca_percentual=ipca_percentual,
+                       referencia_preco=referencia_preco)
         flash('Avaliação salva!', 'success')
 
         next_asset = db.get_next_pending_asset(session['user_id'])

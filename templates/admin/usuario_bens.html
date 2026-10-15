@@ -49,6 +49,7 @@
             <th>Planilha</th>
             <th>Metodologia</th>
             <th class="text-end">Valor de Mercado</th>
+            <th>Referência</th>
             <th>Observação</th>
             <th>Data</th>
             <th></th>
@@ -80,6 +81,11 @@
                 <span class="fw-semibold text-success">{{ a.valor_mercado | brl }}</span>
               {% else %}
                 <span class="text-muted small">Pendente</span>
+              {% endif %}
+            </td>
+            <td class="text-nowrap">
+              {% if a.reviewed_at and a.referencia_preco %}
+                <small>{{ REFERENCIA_PRECO_LABELS.get(a.referencia_preco, a.referencia_preco) }}</small>
               {% endif %}
             </td>
             <td><small class="text-muted">{{ a.observacao or '' }}</small></td>

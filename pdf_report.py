@@ -22,6 +22,13 @@ METODOLOGIA_LABELS = {
     'M3': 'M3 – Correção IPCA',
 }
 
+REFERENCIA_PRECO_LABELS = {
+    'novo_igual':    'Novo e igual',
+    'novo_similar':  'Novo e similar',
+    'usado_igual':   'Usado e igual',
+    'usado_similar': 'Usado e similar',
+}
+
 PAGE_MARGIN = 1.5 * cm
 USABLE_WIDTH = A4[0] - 2 * PAGE_MARGIN
 
@@ -57,7 +64,7 @@ def _group_reviews(rows):
         key = (
             r['planilha'], r['tipo'] or '', r['material'] or '', r['marca'] or '', r['modelo'] or '',
             r['valor_mercado'], r['metodologia'], r['ipca_percentual'], r['observacao'] or '',
-            tuple(r['screenshot_paths']), r['user_id'],
+            r['referencia_preco'] or '', tuple(r['screenshot_paths']), r['user_id'],
         )
         if key not in groups:
             groups[key] = {
@@ -70,6 +77,7 @@ def _group_reviews(rows):
                 'metodologia': r['metodologia'] or 'M1',
                 'ipca_percentual': r['ipca_percentual'],
                 'observacao': r['observacao'],
+                'referencia_preco': r['referencia_preco'],
                 'screenshot_paths': r['screenshot_paths'],
                 'avaliador': r['avaliador'],
                 'updated_at': r['updated_at'],
@@ -150,6 +158,9 @@ def _entry_block(e, styles):
         met_label += f" ({e['ipca_percentual']:.2f}% IPCA)"
     block.append(Paragraph(f"<b>Metodologia:</b> {met_label}", styles['label']))
     block.append(Paragraph(f"<b>Valor de mercado:</b> {_brl(e['valor_mercado'])}", styles['label']))
+    if e['referencia_preco']:
+        ref_label = REFERENCIA_PRECO_LABELS.get(e['referencia_preco'], e['referencia_preco'])
+        block.append(Paragraph(f"<b>Referência de preço:</b> {ref_label}", styles['label']))
 
     data_txt = e['updated_at'][:16].replace('T', ' ') if e['updated_at'] else '—'
     block.append(Paragraph(

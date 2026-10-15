@@ -271,6 +271,21 @@
         </div>
       </div>
 
+      {# Referência do preço pesquisado (M1/M2) #}
+      <div id="section-referencia" class="mt-3">
+        <label class="form-label fw-semibold d-block">
+          Referência do valor pesquisado <span class="text-muted fw-normal small">(opcional)</span>
+        </label>
+        {% for key, label in REFERENCIA_PRECO_LABELS.items() %}
+        <div class="form-check form-check-inline">
+          <input class="form-check-input" type="radio" name="referencia_preco"
+                 id="ref-{{ key }}" value="{{ key }}"
+                 {% if review and review.referencia_preco == key %}checked{% endif %}>
+          <label class="form-check-label" for="ref-{{ key }}">{{ label }}</label>
+        </div>
+        {% endfor %}
+      </div>
+
       {# Observação #}
       <div class="mt-3">
         <label for="observacao" class="form-label fw-semibold">

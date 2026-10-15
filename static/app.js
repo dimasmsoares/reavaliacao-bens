@@ -26,6 +26,7 @@
   const sectionIpca        = document.getElementById('section-ipca');
   const sectionSearch      = document.getElementById('section-search-links');
   const sectionScreenshots = document.getElementById('section-screenshots');
+  const sectionReferencia  = document.getElementById('section-referencia');
   const labelPrices        = document.getElementById('label-prices');
   const labelAvgCtx        = document.getElementById('label-avg-context');
   const ipcaInput          = document.getElementById('ipca-input');
@@ -52,6 +53,7 @@
     if (sectionIpca)        sectionIpca.classList.toggle('d-none', !isM3);
     if (sectionSearch)      sectionSearch.classList.toggle('d-none', isM3 || isM2);
     if (sectionScreenshots) sectionScreenshots.classList.toggle('d-none', isM3);
+    if (sectionReferencia)  sectionReferencia.classList.toggle('d-none', isM3);
 
     if (labelPrices) labelPrices.textContent = isM2 ? 'Preços no acervo' : 'Preços encontrados';
     if (labelAvgCtx) labelAvgCtx.textContent = isM3

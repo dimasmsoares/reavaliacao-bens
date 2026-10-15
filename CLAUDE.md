@@ -24,12 +24,13 @@ O banco `reavaliacao.db` e os screenshots são gerados automaticamente na raiz d
 
 ## Arquitetura
 
-### Backend (`app.py`, `database.py`, `excel_loader.py`, `excel_exporter.py`, `pdf_report.py`)
+### Backend (`app.py`, `database.py`, `excel_loader.py`, `excel_exporter.py`, `pdf_report.py`, `backup.py`)
 - **`app.py`**: Flask app com rotas de autenticação, admin e servidor. Na inicialização: cria banco, admin padrão e importa as planilhas (idempotente). Usa `requests as http_requests` com `verify=False` para a API do BCB (proxy SSL corporativo). Importa `date` de `datetime` para o endpoint `/api/ipca`.
 - **`database.py`**: Todas as operações SQLite. Funções nomeadas por entidade (`get_user_*`, `assign_*`, `get_*_progress`, etc.). Funções de remoção de avaliação: `delete_review(asset_id, user_id)` — cascata no grupo do servidor; `delete_review_single(asset_id)` — só este bem; `admin_delete_review(...)` — admin, bem único + audit_log; `admin_delete_review_group(...)` — admin, grupo inteiro + audit_log por bem. `get_group_reviewed_count(asset_id, user_id)` retorna quantas avaliações existem no grupo daquele servidor. `delete_user(user_id)` apaga também as reviews feitas pelo servidor removido (bens voltam a pendentes), além de liberar assignments. `get_reviews_for_report(user_id=None)` retorna os bens avaliados (com dados do bem, da avaliação e do avaliador) para o relatório PDF; `user_id=None` traz todos, informado restringe a um servidor.
 - **`excel_loader.py`**: Lê cada `.xlsx` com `openpyxl`. Detecta dinamicamente a linha de cabeçalho via `_find_data_start()` (busca "NRP" nas primeiras 20 linhas; fallback = 8). Commita por planilha para ser resiliente a interrupções.
-- **`excel_exporter.py`**: Copia os `.xlsx` originais para `output/` e preenche a coluna 10 (VMB) e coluna 11 (metodologia: `M1`/`M2`/`M3`).
-- **`pdf_report.py`**: Gera o relatório PDF (`reportlab`) dos bens já avaliados via `generate_pdf_report(user_id=None, user_name=None)`. Agrupa em uma única entrada os bens com mesma assinatura de avaliação (planilha+tipo+material+marca+modelo + mesmos `valor_mercado`/`metodologia`/`ipca_percentual`/`observacao`/`screenshot_paths`/`user_id`), listando os NRPs incluídos. Cada entrada mostra metodologia, valor de mercado, avaliador, data, observação (se houver) e as imagens (lidas de `SCREENSHOTS_DIR`).
+- **`excel_exporter.py`**: Copia os `.xlsx` originais para `output/` e preenche a coluna 10 (VMB). As planilhas têm 18 colunas originais e a coluna 11 é o "ESTADO DE CONSERVAÇÃO (EC)", que **não deve ser sobrescrita**; por isso metodologia (`M1`/`M2`/`M3`) vai na coluna extra 19 e a referência do valor pesquisado (rótulo legível) na coluna 20, ambas com cabeçalho escrito na linha de cabeçalho (detectada via `_find_data_start`) copiando o estilo da coluna 18.
+- **`backup.py`**: `run_backup()` gera um `.zip` com snapshot consistente do banco (`sqlite3.backup`, seguro com WAL e app rodando) + `screenshots/`, salva em `backups/` e copia para a pasta de rede do SEREG (`REMOTE_BACKUP_DIR`); remove backups com mais de `RETENTION_DAYS` (30) nos dois destinos e registra tudo em `backups/backup_log.txt`. Executável via `python backup.py` (Agendador de Tarefas do Windows) ou pelo botão "Backup Agora" do dashboard (`POST /admin/backup`). Falha na cópia de rede não invalida o backup local (`remote_ok=False`).
+- **`pdf_report.py`**: Gera o relatório PDF (`reportlab`) dos bens já avaliados via `generate_pdf_report(user_id=None, user_name=None)`. Agrupa em uma única entrada os bens com mesma assinatura de avaliação (planilha+tipo+material+marca+modelo + mesmos `valor_mercado`/`metodologia`/`ipca_percentual`/`observacao`/`referencia_preco`/`screenshot_paths`/`user_id`), listando os NRPs incluídos. Cada entrada mostra metodologia, valor de mercado, referência do valor pesquisado (se houver), avaliador, data, observação (se houver) e as imagens (lidas de `SCREENSHOTS_DIR`).
 
 ### Banco de dados (SQLite WAL)
 - `users`: admin + servidores com senha hash (werkzeug)
@@ -43,6 +44,7 @@ O banco `reavaliacao.db` e os screenshots são gerados automaticamente na raiz d
   - `observacao TEXT`
   - `metodologia TEXT DEFAULT "M1"` — `M1`, `M2` ou `M3`
   - `ipca_percentual REAL` — percentual IPCA acumulado (apenas M3)
+  - `referencia_preco TEXT` — referência do valor pesquisado (apenas M1/M2, opcional): `novo_igual`, `novo_similar`, `usado_igual`, `usado_similar`. Rótulos em `pdf_report.REFERENCIA_PRECO_LABELS` (exposto ao Jinja como global)
   - `user_id INTEGER` — servidor que avaliou
   - `updated_at TEXT`
 - `audit_log`: registro de ações administrativas sensíveis (desfazer avaliações). Campos: `action`, `asset_id`, `admin_id`, `target_user_id`, `justificativa`, `created_at`. Ao desfazer um grupo, cada bem removido gera uma entrada separada.
@@ -62,8 +64,8 @@ A chave de grupo é `COALESCE(tipo,'') || '~~' || material || '~~' || marca || '
 
 ### Frontend (`templates/`, `static/`)
 - `base.html`: layout Bootstrap 5 + navbar contextual (admin vs. servidor). Servidores têm link "Senha" na navbar.
-- `admin/`: dashboard (progresso global + por planilha com únicos), gerência de servidores, distribuição por grupos únicos, `usuario_bens.html` (tabela de bens com metodologia + desfazer com justificativa; quando o bem tem similares avaliados, exibe checkbox para desfazer o grupo inteiro).
-- `servidor/avaliar.html`: tela principal — sidebar com filtro de texto + toggle "Só pendentes", seletor de metodologia (radio M1/M2/M3), botões de pesquisa (`#section-search-links`: Mercado Livre/Amazon/Google Shopping/Buscapé + Claude/ChatGPT/Gemini com prompt de pesquisa pré-preenchido via query string e copiado para a área de transferência, classe `.btn-ai-search`), seção de preços (`#section-prices`), seção IPCA (`#section-ipca`), seção de prints (`#section-screenshots`, oculta em M3), campo de valor de mercado editável, observação, botão "Refazer" que abre modal — se `group_reviewed_count > 1` oferece opção de desfazer só este bem ou todos os similares do grupo.
+- `admin/`: dashboard (progresso global + por planilha com únicos), gerência de servidores, distribuição por grupos únicos, `usuario_bens.html` (tabela de bens com metodologia, referência do valor pesquisado + desfazer com justificativa; quando o bem tem similares avaliados, exibe checkbox para desfazer o grupo inteiro).
+- `servidor/avaliar.html`: tela principal — sidebar com filtro de texto + toggle "Só pendentes", seletor de metodologia (radio M1/M2/M3), botões de pesquisa (`#section-search-links`: Mercado Livre/Amazon/Google Shopping/Buscapé + Claude/ChatGPT/Gemini com prompt de pesquisa pré-preenchido via query string e copiado para a área de transferência, classe `.btn-ai-search`), seção de preços (`#section-prices`), seção IPCA (`#section-ipca`), seção de prints (`#section-screenshots`, oculta em M3), campo de valor de mercado editável, radio "Referência do valor pesquisado" (`#section-referencia`, oculto em M3), observação, botão "Refazer" que abre modal — se `group_reviewed_count > 1` oferece opção de desfazer só este bem ou todos os similares do grupo.
 - `servidor/minha_senha.html`: formulário de alteração de senha.
 - `static/app.js`: gerência de preços (add/remove/média), `switchMetodologia()` (alterna seções/labels/readonly), `fetchIPCA()` (async fetch para `/api/ipca`, lê `data-tombamento` e `data-vc` do elemento `#section-ipca`), `updateIPCAValor()` (calcula valor de mercado em M3), screenshots (compressão canvas JPEG 1280px, clipboard, drag&drop, file picker), botões `.btn-ai-search` (copiam `data-ai-prompt` para a área de transferência via `navigator.clipboard`), validação no submit (M3 não exige preços nem prints), filtro da sidebar.
 
@@ -80,13 +82,14 @@ Os valores de `valor_contabil` e `data_tombamento` são passados via atributos `
 - `GET /screenshots/<path>` — serve screenshots salvos.
 - `POST /admin/export/pdf` — gera e baixa o relatório PDF global (todos os servidores).
 - `POST /admin/usuarios/<user_id>/export/pdf` — gera e baixa o relatório PDF restrito a um servidor.
+- `POST /admin/backup` — executa `backup.run_backup()` e informa o resultado via flash.
 
 ### Fluxo principal
 1. Admin cria servidores (`/admin/usuarios`) e distribui bens (`/admin/distribuir`) por planilha, grupos únicos ou redistribuição.
 2. Servidor acessa `/avaliar`, escolhe a metodologia (M1/M2/M3), avalia o bem e salva.
 3. Ao salvar: `save_review()` propaga automaticamente para todos os bens com mesmo `tipo+material+marca+modelo` sem review (`INSERT OR IGNORE`), persistindo também `metodologia` e `ipca_percentual`.
 4. Admin acompanha via dashboard e pode desfazer avaliações com justificativa (`audit_log`). Ao desfazer, se o bem pertence a um grupo com múltiplos similares avaliados, o modal oferece checkbox para reverter o grupo inteiro (cada bem gera entrada no `audit_log`). O servidor também pode desfazer pela tela de avaliação, com escolha entre "só este bem" ou "todos os similares".
-5. Admin exporta resultados em `/admin/export` → gera `output/<planilha>_avaliado_<data>.xlsx` com colunas VMB (10) e metodologia (11) preenchidas.
+5. Admin exporta resultados em `/admin/export` → gera `output/<planilha>_avaliado_<data>.xlsx` com VMB (coluna 10), metodologia (coluna 19) e referência do valor pesquisado (coluna 20) preenchidas; o EC (coluna 11) é preservado.
 6. Admin gera relatório PDF dos bens avaliados (botão "Exportar PDF" no dashboard ou na tela de bens de um servidor) → `pdf_report.generate_pdf_report()`.
 
 ## Arquivos de dados
@@ -94,3 +97,4 @@ Os valores de `valor_contabil` e `data_tombamento` são passados via atributos `
 - `reavaliacao.db`: banco SQLite gerado automaticamente
 - `screenshots/`: prints salvos como `<asset_id>_<timestamp>_<idx>.jpg`
 - `output/`: Excel exportado com avaliações preenchidas
+- `backups/`: zips de backup (banco + screenshots) e `backup_log.txt` (ignorado no git)
