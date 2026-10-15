@@ -2,11 +2,17 @@
 {% block title %}Bens de {{ user.name }}{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
   <h4 class="mb-0 fw-bold">
     <i class="bi bi-list-ul me-2 text-primary"></i>Bens de {{ user.name }}
   </h4>
-  <div class="d-flex gap-2">
+  <div class="d-flex flex-wrap gap-2">
+    <form method="post" action="{{ url_for('admin_offline_pacote', user_id=user.id) }}"
+          onsubmit="return confirm('Gerar o pacote de avaliação offline de {{ user.name }}? Os bens pendentes ficarão reservados para ele na distribuição.')">
+      <button class="btn btn-outline-primary btn-sm">
+        <i class="bi bi-cloud-arrow-down me-1"></i> Pacote offline
+      </button>
+    </form>
     <form method="post" action="{{ url_for('admin_usuario_export_pdf', user_id=user.id) }}"
           onsubmit="return confirm('Gerar relatório PDF dos bens avaliados por {{ user.name }}?')">
       <button class="btn btn-danger btn-sm">
@@ -18,6 +24,21 @@
     </a>
   </div>
 </div>
+
+{% if offline %}
+<div class="alert alert-info py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <span>
+    <i class="bi bi-cloud-arrow-down me-1"></i>
+    <strong>{{ offline.assets }}</strong> bem(ns) pendente(s) em <strong>avaliação offline</strong>
+    (pacote baixado em {{ offline.since[:10] | data_br }}). Eles ficam reservados para este
+    servidor: a distribuição balanceada, "desfazer distribuição" e "redistribuir" não os movem.
+  </span>
+  <form method="post" action="{{ url_for('admin_offline_liberar', user_id=user.id) }}"
+        onsubmit="return confirm('Liberar a reserva offline de {{ user.name }}? Se o servidor importar o pacote depois, os grupos que já tiverem sido avaliados ou movidos serão ignorados.')">
+    <button class="btn btn-outline-secondary btn-sm"><i class="bi bi-unlock me-1"></i> Liberar reserva</button>
+  </form>
+</div>
+{% endif %}
 
 {% if assets %}
 {% set total = assets | length %}
@@ -71,6 +92,9 @@
                   <span class="badge bg-secondary">M2 – Acervo</span>
                 {% else %}
                   <span class="badge bg-primary">M1 – Mercado</span>
+                {% endif %}
+                {% if a.origem == 'offline' %}
+                  <span class="badge text-bg-light border" title="Importado de pacote offline"><i class="bi bi-cloud-arrow-up"></i> offline</span>
                 {% endif %}
               {% else %}
                 <span class="text-muted">—</span>

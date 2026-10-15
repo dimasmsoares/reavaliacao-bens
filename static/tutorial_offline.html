@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tutorial — Avaliação Offline</title>
+<!-- Página autônoma: sem recursos externos, para abrir sem acesso à rede. -->
+<style>
+  :root {
+    --bg: #f5f7fa; --card: #ffffff; --text: #1f2933; --muted: #5f6b7a; --border: #dde3ea;
+    --primary: #0d6efd; --primary-soft: #e7f0ff;
+    --ok: #198754; --ok-soft: #e8f5ee; --warn: #b7791f; --warn-soft: #fff6e0;
+    --err: #c0392b; --err-soft: #fdecea; --gray-soft: #eef1f4;
+    --xl-locked: #1F4E78; --xl-input: #BF8F00; --xl-input-fill: #FFF2CC; --xl-locked-fill: #F2F2F2;
+    --code-bg: #f0f2f5; --xl-link: #0563C1;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14181d; --card: #1d232a; --text: #e6e9ed; --muted: #9aa5b1; --border: #2f3842;
+      --primary: #6ea8fe; --primary-soft: #1b2a40;
+      --ok: #5cc28f; --ok-soft: #173326; --warn: #f0b75a; --warn-soft: #3a2f17;
+      --err: #f08178; --err-soft: #3d1f1c; --gray-soft: #262d35;
+      --xl-input-fill: #4a4220; --xl-locked-fill: #2a3038; --code-bg: #262d35; --xl-link: #8ab4f8;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 16px/1.6 "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif; }
+  header { background: #0d6efd; color: #fff; padding: 28px 16px; }
+  header .wrap { max-width: 920px; margin: 0 auto; }
+  header h1 { margin: 0 0 4px; font-size: 1.75rem; }
+  header p { margin: 0; opacity: .9; }
+  main { max-width: 920px; margin: 0 auto; padding: 24px 16px 64px; }
+  nav.toc { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 20px; margin-bottom: 24px; }
+  nav.toc ol { margin: 6px 0 0; padding-left: 22px; columns: 2; column-gap: 32px; }
+  nav.toc li { margin: 0 0 6px; break-inside: avoid; }
+  nav.toc a { color: var(--primary); text-decoration: none; }
+  nav.toc a:hover { text-decoration: underline; }
+  section { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 20px 24px; margin-bottom: 18px; }
+  h2 { margin: 0 0 12px; font-size: 1.3rem; display: flex; align-items: center; gap: 10px; }
+  h2 .n { background: var(--primary); color: #fff; border-radius: 50%; width: 30px; height: 30px; flex: none;
+          display: inline-flex; align-items: center; justify-content: center; font-size: .95rem; }
+  h3 { font-size: 1.05rem; margin: 18px 0 6px; }
+  p, li { margin: 6px 0; }
+  code, kbd { background: var(--code-bg); border-radius: 4px; padding: 1px 6px; font-size: .9em;
+              font-family: Consolas, "Courier New", monospace; }
+  p code, li code { overflow-wrap: anywhere; }
+  kbd { border: 1px solid var(--border); border-bottom-width: 2px; }
+  .muted { color: var(--muted); }
+  .callout { border-left: 4px solid; border-radius: 6px; padding: 10px 14px; margin: 12px 0; }
+  .callout.info { border-color: var(--primary); background: var(--primary-soft); }
+  .callout.warn { border-color: var(--warn); background: var(--warn-soft); }
+  .callout.err  { border-color: var(--err);  background: var(--err-soft); }
+  .callout b:first-child { display: block; margin-bottom: 2px; }
+  .flow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 12px 0 4px; }
+  .flow div { background: var(--gray-soft); border-radius: 8px; padding: 12px; text-align: center; font-size: .92rem; }
+  .flow div b { display: block; font-size: 1.6rem; color: var(--primary); line-height: 1.2; }
+  .flow .where { display: block; font-size: .78rem; color: var(--muted); margin-top: 4px; }
+  table { border-collapse: collapse; width: 100%; font-size: .92rem; margin: 10px 0; }
+  th, td { border: 1px solid var(--border); padding: 6px 9px; text-align: left; vertical-align: top; }
+  th { background: var(--gray-soft); }
+  .scroll { overflow-x: auto; }
+  /* Simulação da planilha */
+  .xl { font: 13px/1.35 Calibri, "Segoe UI", Arial, sans-serif; min-width: 760px; }
+  .xl th { color: #fff; text-align: center; font-weight: 600; }
+  .xl th.l { background: var(--xl-locked); }
+  .xl th.i { background: var(--xl-input); }
+  .xl td.l { background: var(--xl-locked-fill); }
+  .xl td.i { background: var(--xl-input-fill); }
+  .xl td.link { color: var(--xl-link); text-decoration: underline; }
+  .xl td.num { text-align: right; white-space: nowrap; }
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: .88rem; }
+  .legend span::before { content: ""; display: inline-block; width: 14px; height: 14px; border-radius: 3px; margin-right: 6px; vertical-align: -2px; }
+  .legend .li::before { background: var(--xl-input-fill); border: 1px solid var(--xl-input); }
+  .legend .ll::before { background: var(--xl-locked-fill); border: 1px solid var(--xl-locked); }
+  /* Árvore de pastas */
+  .tree { font-family: Consolas, "Courier New", monospace; font-size: .9rem; background: var(--code-bg);
+          border-radius: 8px; padding: 12px 16px; white-space: pre; overflow-x: auto; line-height: 1.5; }
+  .tree .hl { color: var(--ok); font-weight: 700; }
+  .tree .c { color: var(--muted); }
+  /* Status da prévia */
+  .badge { display: inline-block; border-radius: 999px; padding: 1px 10px; font-size: .85rem; font-weight: 600; white-space: nowrap; }
+  .b-ok { background: var(--ok-soft); color: var(--ok); }
+  .b-warn { background: var(--warn-soft); color: var(--warn); }
+  .b-err { background: var(--err-soft); color: var(--err); }
+  .b-gray { background: var(--gray-soft); color: var(--muted); }
+  .checklist { list-style: none; padding-left: 0; }
+  .checklist li::before { content: "☐"; margin-right: 8px; color: var(--primary); }
+  details { border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; margin: 8px 0; }
+  details summary { cursor: pointer; font-weight: 600; }
+  details[open] summary { margin-bottom: 6px; }
+  @media (max-width: 640px) {
+    .flow { grid-template-columns: repeat(2, 1fr); }
+    nav.toc ol { columns: 1; }
+    section { padding: 16px; }
+  }
+  @media print {
+    header { background: none; color: #000; padding: 0 0 12px; }
+    body { background: #fff; }
+    section, nav.toc { break-inside: avoid; border-color: #ccc; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <h1>Avaliação Offline — Tutorial</h1>
+    <p>Reavaliação de Bens Móveis · Como avaliar seus bens fora da rede da Câmara e enviar o resultado ao sistema</p>
+  </div>
+</header>
+
+<main>
+
+<nav class="toc">
+  <b>Conteúdo</b>
+  <ol>
+    <li><a href="#visao">Visão geral</a></li>
+    <li><a href="#baixar">Baixar o pacote</a></li>
+    <li><a href="#extrair">Extrair o pacote</a></li>
+    <li><a href="#planilha">Preencher a planilha</a></li>
+    <li><a href="#prints">Salvar os prints</a></li>
+    <li><a href="#enviar">Compactar e enviar</a></li>
+    <li><a href="#previa">Conferir a prévia e gravar</a></li>
+    <li><a href="#duvidas">Dúvidas frequentes</a></li>
+    <li><a href="#checklist">Checklist final</a></li>
+  </ol>
+</nav>
+
+<!-- 1 -->
+<section id="visao">
+  <h2><span class="n">1</span> Visão geral</h2>
+  <p>
+    A avaliação offline serve para quando você vai trabalhar <b>sem acesso à rede da Câmara</b>
+    (por exemplo, em casa), mas <b>com acesso à internet</b> para pesquisar os preços.
+    Você baixa uma planilha com os seus bens pendentes, faz as pesquisas fora do sistema e,
+    de volta à rede, envia o resultado.
+  </p>
+  <div class="flow">
+    <div><b>1</b>Baixar o pacote<span class="where">na rede da Câmara</span></div>
+    <div><b>2</b>Preencher a planilha<span class="where">fora da rede</span></div>
+    <div><b>3</b>Salvar os prints<span class="where">fora da rede</span></div>
+    <div><b>4</b>Enviar e conferir<span class="where">na rede da Câmara</span></div>
+  </div>
+  <div class="callout info">
+    <b>Uma linha = um grupo de bens idênticos</b>
+    Bens com o mesmo tipo, material, marca e modelo são avaliados juntos, como na tela do sistema.
+    A coluna <b>Qtd. bens</b> mostra quantos bens a linha avalia de uma vez. Por isso a planilha
+    tem poucas centenas de linhas, e não milhares.
+  </div>
+</section>
+
+<!-- 2 -->
+<section id="baixar">
+  <h2><span class="n">2</span> Baixar o pacote <span class="muted" style="font-weight:400;font-size:.9rem">(na rede da Câmara)</span></h2>
+  <ol>
+    <li>Entre no sistema e clique em <b>Offline</b>, no menu superior.</li>
+    <li>Clique em <b>Baixar pacote offline</b>. O navegador salva um arquivo como
+      <code>reavaliacao_offline_seu.nome_20261015_1430.zip</code>.</li>
+    <li>Leve esse arquivo para o computador onde vai trabalhar (notebook, pendrive, etc.).</li>
+  </ol>
+  <div class="callout info">
+    <b>Seus bens ficam reservados</b>
+    Enquanto o pacote estiver com você, o administrador não redistribui esses bens para outra
+    pessoa. Se baixar um <b>novo</b> pacote, ele passa a refletir os pendentes daquele momento.
+  </div>
+</section>
+
+<!-- 3 -->
+<section id="extrair">
+  <h2><span class="n">3</span> Extrair o pacote</h2>
+  <p>Clique com o botão direito no <code>.zip</code> e escolha <b>Extrair Tudo…</b>. Você terá esta pasta:</p>
+  <div class="tree">reavaliacao_offline_seu.nome_20261015_1430/
+├── <span class="hl">avaliacao.xlsx</span>                 <span class="c">← a planilha que você vai preencher</span>
+├── LEIA-ME.txt                    <span class="c">← resumo das instruções</span>
+├── TUTORIAL.html                  <span class="c">← este tutorial</span>
+└── prints/
+    ├── <span class="hl">G0001 - ADAPTADOR DE PAREDE - CLEAR-COM WP-2/</span>    <span class="c">← prints do grupo G0001</span>
+    ├── <span class="hl">G0002 - APARELHO TELEFONICO C/TECLADO - INTELBRAS/</span>
+    └── …                          <span class="c">(uma pasta para cada grupo)</span></div>
+  <div class="callout err">
+    <b>Não trabalhe dentro do .zip</b>
+    Se você abrir a planilha com dois cliques <i>dentro</i> do <code>.zip</code> sem extrair,
+    o Excel abre uma cópia temporária e <b>o que você digitar será perdido</b>. Extraia primeiro.
+  </div>
+  <p class="muted">
+    Ao abrir a planilha, o Excel pode mostrar a faixa amarela <i>“Modo de Exibição Protegido”</i>.
+    Clique em <b>Habilitar Edição</b>.
+  </p>
+</section>
+
+<!-- 4 -->
+<section id="planilha">
+  <h2><span class="n">4</span> Preencher a planilha</h2>
+  <p>Preencha <b>só as colunas amarelas</b>. As colunas cinzas identificam o grupo e ficam bloqueadas.</p>
+  <div class="legend">
+    <span class="li">Você preenche</span>
+    <span class="ll">Identificação (não altere)</span>
+  </div>
+  <div class="scroll">
+  <table class="xl">
+    <tr>
+      <th class="l">Código</th><th class="l">Material</th><th class="l">Marca</th><th class="l">Modelo</th>
+      <th class="l">Qtd. bens</th><th class="l">Mercado Livre</th>
+      <th class="i">Metodologia</th><th class="i">Preço 1</th><th class="i">Preço 2</th><th class="i">Preço 3</th>
+      <th class="i">Valor de mercado</th><th class="i">Referência do valor</th><th class="i">Observação</th>
+    </tr>
+    <tr>
+      <td class="l">G0001</td><td class="l">ADAPTADOR DE PAREDE</td><td class="l">CLEAR-COM</td><td class="l">WP-2</td>
+      <td class="l num">6</td><td class="link">Mercado Livre</td>
+      <td class="i">M1</td><td class="i num">R$ 450,00</td><td class="i num">R$ 520,00</td><td class="i num">R$ 490,00</td>
+      <td class="i num">R$ 486,67</td><td class="i">Usado e igual</td><td class="i"></td>
+    </tr>
+    <tr>
+      <td class="l">G0002</td><td class="l">APARELHO TELEFÔNICO</td><td class="l">INTELBRÁS</td><td class="l">TC60ID</td>
+      <td class="l num">12</td><td class="link">Mercado Livre</td>
+      <td class="i">M3</td><td class="i"></td><td class="i"></td><td class="i"></td>
+      <td class="i"></td><td class="i"></td><td class="i">sem anúncios do modelo</td>
+    </tr>
+    <tr>
+      <td class="l">G0003</td><td class="l">CADEIRA GIRATÓRIA</td><td class="l">FLEXFORM</td><td class="l">ERGOS</td>
+      <td class="l num">40</td><td class="link">Mercado Livre</td>
+      <td class="i"></td><td class="i"></td><td class="i"></td><td class="i"></td>
+      <td class="i"></td><td class="i"></td><td class="i"></td>
+    </tr>
+  </table>
+  </div>
+  <p class="muted" style="font-size:.88rem">
+    Exemplo simplificado. A planilha real também tem Tipo, Google Shopping, Preço 4 e 5,
+    Valor contábil, Data de tombamento, Planilha, NRPs e o pedido para IA.
+    A linha G0003 ficou em branco: ela simplesmente não é enviada desta vez.
+  </p>
+
+  <h3>Metodologia: escolha na lista da célula</h3>
+  <table>
+    <tr><th style="width:22%">Metodologia</th><th>O que preencher</th></tr>
+    <tr><td><b>M1</b> – Pesquisa de mercado</td>
+        <td>De 1 a 5 preços encontrados na internet, e os prints da pesquisa (veja o passo 5).</td></tr>
+    <tr><td><b>M2</b> – Acervo patrimonial</td>
+        <td>Igual à M1, com preços obtidos em acervos patrimoniais de referência.</td></tr>
+    <tr><td><b>M3</b> – Correção pelo IPCA</td>
+        <td>Só escolha <b>M3</b>. Não precisa de preços nem de prints: o sistema busca o IPCA e
+            calcula o valor na hora de importar. Só funciona se o bem tiver valor contábil e data de
+            tombamento (veja as colunas no fim da linha).</td></tr>
+  </table>
+
+  <h3>Preços e valor de mercado</h3>
+  <ul>
+    <li>Digite os preços como números (ex.: <code>450</code> ou <code>450,90</code>). O formato R$ é aplicado automaticamente.</li>
+    <li>O <b>Valor de mercado</b> é a média dos preços, calculada sozinha. Se precisar, digite outro valor por cima.
+        Se apagar o que digitou, o sistema usará a média dos preços na importação.</li>
+  </ul>
+
+  <h3>Referência do valor <span class="muted" style="font-weight:400">(opcional, M1/M2)</span></h3>
+  <p>Indique se o preço encontrado é de um bem <b>Novo e igual</b>, <b>Novo e similar</b>,
+     <b>Usado e igual</b> ou <b>Usado e similar</b> ao bem avaliado.</p>
+
+  <h3>Ajudas para pesquisar</h3>
+  <ul>
+    <li>As colunas <b>Mercado Livre</b> e <b>Google Shopping</b> são links: clique para abrir a busca do bem.</li>
+    <li>A última coluna, <b>Pedido para IA</b>, traz um texto pronto. Copie a célula e cole no Claude, ChatGPT ou Gemini.
+        Sempre confira os valores sugeridos pela IA nos anúncios reais.</li>
+    <li>Você pode usar o <b>filtro</b> do cabeçalho (ex.: filtrar por Planilha ou Material) para organizar o trabalho.</li>
+  </ul>
+  <div class="callout warn">
+    <b>Não altere a estrutura</b>
+    Não apague linhas, não mude os códigos (G0001…) e não renomeie as colunas. Salve sempre no formato
+    <code>.xlsx</code>, com o mesmo nome, dentro da pasta extraída.
+  </div>
+</section>
+
+<!-- 5 -->
+<section id="prints">
+  <h2><span class="n">5</span> Salvar os prints</h2>
+  <p>
+    Para cada grupo avaliado com M1 ou M2, salve <b>2 ou 3 prints</b> da pesquisa (anúncios com o preço
+    visível) <b>dentro da pasta do grupo</b>, em <code>prints/</code>. O nome dos arquivos não importa.
+  </p>
+  <div class="tree">prints/
+└── G0001 - ADAPTADOR DE PAREDE - CLEAR-COM WP-2/
+    ├── <span class="hl">mercadolivre.png</span>
+    ├── <span class="hl">anuncio2.jpg</span>
+    └── <span class="hl">Captura de tela 2026-10-15 143012.png</span></div>
+  <h3>Como capturar a tela no Windows</h3>
+  <ul>
+    <li><kbd>Win</kbd> + <kbd>Shift</kbd> + <kbd>S</kbd>: selecione a área. Clique na notificação que aparece
+        e use <b>Salvar</b> (ícone de disquete) para gravar o arquivo na pasta do grupo.</li>
+    <li>No Windows 11, a captura também fica salva automaticamente em
+        <code>Imagens\Capturas de Tela</code>. Basta mover para a pasta do grupo.</li>
+  </ul>
+  <p class="muted">Formatos aceitos: PNG, JPG, WEBP, BMP e GIF. As imagens são reduzidas automaticamente na importação.</p>
+  <div class="callout err">
+    <b>Não cole os prints dentro da planilha</b>
+    Imagens coladas no Excel <b>são ignoradas</b>. O sistema só reconhece os prints que estão
+    na pasta do grupo.
+  </div>
+</section>
+
+<!-- 6 -->
+<section id="enviar">
+  <h2><span class="n">6</span> Compactar e enviar <span class="muted" style="font-weight:400;font-size:.9rem">(na rede da Câmara)</span></h2>
+  <ol>
+    <li>Feche a planilha no Excel.</li>
+    <li>Clique com o botão direito na <b>pasta extraída inteira</b> e escolha:
+      <ul>
+        <li>Windows 11: <b>Compactar para arquivo ZIP</b></li>
+        <li>Windows 10: <b>Enviar para › Pasta compactada</b></li>
+      </ul>
+    </li>
+    <li>No sistema, abra <b>Offline</b> › <b>Importar avaliações</b>, selecione o <code>.zip</code> e clique em
+        <b>Enviar e conferir</b>. Arquivos grandes podem levar alguns minutos para subir (limite de 1 GB).</li>
+  </ol>
+  <div class="callout warn">
+    <b>Envie sempre a pasta inteira (planilha + prints)</b>
+    Uma linha preenchida é gravada com os prints que estiverem no <code>.zip</code> <i>naquele envio</i>.
+    Se você enviar só a planilha, as linhas preenchidas serão gravadas <b>sem prints</b>.
+    Só envie apenas o <code>.xlsx</code> quando de fato não houver prints (por exemplo, só linhas M3).
+  </div>
+</section>
+
+<!-- 7 -->
+<section id="previa">
+  <h2><span class="n">7</span> Conferir a prévia e gravar</h2>
+  <p>Antes de gravar qualquer coisa, o sistema mostra uma <b>prévia</b> com a situação de cada linha preenchida:</p>
+  <table>
+    <tr><th style="width:30%">Situação</th><th>O que significa</th><th style="width:30%">O que fazer</th></tr>
+    <tr><td><span class="badge b-ok">Pronto para gravar</span></td>
+        <td>Linha correta.</td><td>Nada.</td></tr>
+    <tr><td><span class="badge b-warn">Será gravado, com avisos</span></td>
+        <td>Será gravada, mas algo merece atenção. Ex.: nenhum print anexado, valor digitado diferente da média,
+            metodologia em branco (considerada M1).</td>
+        <td>Confira a mensagem. Se estiver certo, pode gravar.</td></tr>
+    <tr><td><span class="badge b-err">Com erro</span></td>
+        <td><b>Não</b> será gravada. Ex.: M1 sem nenhum preço, preço que não é número, metodologia inválida.</td>
+        <td>Corrija na planilha e envie de novo depois.</td></tr>
+    <tr><td><span class="badge b-gray">Conflito</span></td>
+        <td>O grupo foi avaliado pela tela do sistema, ou deixou de ser seu, enquanto você estava fora.</td>
+        <td>A linha é ignorada. Fale com o administrador se achar que é engano.</td></tr>
+    <tr><td><span class="badge b-gray">Já importado</span></td>
+        <td>Essa linha já foi gravada num envio anterior.</td><td>Nada: ela não é gravada de novo.</td></tr>
+  </table>
+  <p>
+    Se estiver tudo certo, clique em <b>Gravar N grupo(s)</b>. Para desistir, clique em <b>Cancelar</b>: nada é salvo.
+    Linhas em branco não aparecem na prévia.
+  </p>
+  <div class="callout info">
+    <b>Pode enviar em etapas</b>
+    Avaliou 50 grupos hoje? Envie. Na semana que vem, continue preenchendo <b>a mesma planilha</b>
+    e envie de novo: o que já foi gravado aparece como “Já importado” e só as linhas novas são gravadas.
+  </div>
+</section>
+
+<!-- 8 -->
+<section id="duvidas">
+  <h2><span class="n">8</span> Dúvidas frequentes</h2>
+  <details>
+    <summary>Esqueci os prints de um grupo que já foi gravado. E agora?</summary>
+    Abra o bem pela tela <b>Avaliar</b> do sistema, anexe os prints e salve. A avaliação é atualizada
+    com os prints.
+  </details>
+  <details>
+    <summary>Gravei um valor errado.</summary>
+    Corrija pela tela <b>Avaliar</b> do sistema, ou use <b>Refazer</b> nessa tela para apagar a avaliação e
+    avaliar de novo. Reenviar a planilha não altera linhas que já foram gravadas.
+  </details>
+  <details>
+    <summary>Posso avaliar alguns bens pelo sistema e outros pela planilha?</summary>
+    Pode. Os grupos avaliados pelo sistema aparecem como “Conflito” na prévia e são ignorados. Para evitar
+    retrabalho, não preencha na planilha o que já avaliou pela tela.
+  </details>
+  <details>
+    <summary>Perdi a planilha ou quero uma versão atualizada.</summary>
+    Baixe um novo pacote em <b>Offline</b>. Ele traz só os grupos ainda pendentes. Planilhas antigas
+    continuam podendo ser enviadas.
+  </details>
+  <details>
+    <summary>Apareceu “Este pacote foi gerado para outro servidor”.</summary>
+    Cada pacote só pode ser importado por quem o baixou (ou para quem o administrador o gerou). Confira se
+    entrou no sistema com o seu usuário.
+  </details>
+  <details>
+    <summary>Apareceu erro ao consultar o IPCA (linhas M3).</summary>
+    É uma instabilidade momentânea do serviço do Banco Central. Cancele e envie novamente alguns minutos depois.
+  </details>
+  <details>
+    <summary>A prévia diz que a imagem “não é uma imagem válida”.</summary>
+    O arquivo está corrompido ou não é uma imagem (ex.: PDF). Salve o print novamente como PNG ou JPG.
+  </details>
+  <details>
+    <summary>Posso usar outro computador ou o LibreOffice?</summary>
+    Sim, desde que salve no formato <code>.xlsx</code> sem mudar a estrutura da planilha. O recomendado é o Excel.
+  </details>
+</section>
+
+<!-- 9 -->
+<section id="checklist">
+  <h2><span class="n">9</span> Checklist final</h2>
+  <ul class="checklist">
+    <li>Extraí o <code>.zip</code> antes de abrir a planilha.</li>
+    <li>Preenchi só as colunas amarelas, com a metodologia escolhida na lista.</li>
+    <li>M1/M2: informei os preços e salvei 2 ou 3 prints na pasta de cada grupo.</li>
+    <li>M3: só escolhi “M3”.</li>
+    <li>Salvei a planilha (<code>.xlsx</code>, mesmo nome) e fechei o Excel.</li>
+    <li>Compactei a <b>pasta inteira</b> e enviei em <b>Offline › Importar avaliações</b>.</li>
+    <li>Conferi a prévia e cliquei em <b>Gravar</b>.</li>
+  </ul>
+</section>
+
+</main>
+</body>
+</html>

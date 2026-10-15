@@ -1,0 +1,87 @@
+{% extends 'base.html' %}
+{% block title %}Avaliação Offline{% endblock %}
+{% block container_class %}container py-3{% endblock %}
+
+{% block content %}
+<h4 class="fw-bold mb-1"><i class="bi bi-cloud-arrow-down me-2 text-primary"></i>Avaliação Offline</h4>
+<p class="text-muted mb-3">
+  Baixe seus bens pendentes para avaliar fora da rede da Câmara e importe o resultado depois.
+  <a href="{{ url_for('static', filename='tutorial_offline.html') }}" target="_blank" class="ms-1">
+    <i class="bi bi-book me-1"></i>Ver o tutorial</a>
+  <span class="small">(ele também vem dentro do pacote)</span>
+</p>
+
+{% if checkout %}
+<div class="alert alert-info py-2">
+  <i class="bi bi-info-circle me-1"></i>
+  Você tem um pacote baixado em <strong>{{ checkout.since[:10] | data_br }}</strong>
+  com <strong>{{ checkout.assets }}</strong> bem(ns) ainda pendente(s).
+  Enquanto isso, esses bens ficam reservados para você na distribuição.
+</div>
+{% endif %}
+
+<div class="row g-3">
+  <div class="col-lg-5">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body">
+        <h6 class="fw-semibold"><span class="badge bg-primary me-1">1</span> Baixar pacote</h6>
+        <p class="small text-muted mb-3">
+          Um <code>.zip</code> com a planilha <code>avaliacao.xlsx</code> (uma linha por grupo de
+          bens idênticos), uma pasta de prints para cada grupo e as instruções de preenchimento.
+        </p>
+        <p class="small mb-3">
+          <b>Pendentes agora:</b> {{ progress.total - progress.reviewed }} bem(ns)
+        </p>
+        <form method="post" action="{{ url_for('offline_pacote') }}">
+          <button class="btn btn-primary" {% if progress.total - progress.reviewed == 0 %}disabled{% endif %}>
+            <i class="bi bi-download me-1"></i> Baixar pacote offline
+          </button>
+        </form>
+        <p class="small text-muted mt-3 mb-0">
+          Baixar um novo pacote substitui a reserva anterior pelos pendentes atuais.
+          Pacotes antigos continuam podendo ser importados.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-7">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body">
+        <h6 class="fw-semibold"><span class="badge bg-primary me-1">2</span> Importar avaliações</h6>
+        <p class="small text-muted mb-3">
+          Envie a pasta compactada em <code>.zip</code> (planilha + prints) ou só a planilha
+          <code>.xlsx</code>. Antes de gravar, você verá uma prévia do que será salvo.
+          Linhas em branco são ignoradas, então é possível importar em várias etapas.
+        </p>
+        <form method="post" action="{{ url_for('offline_importar') }}" enctype="multipart/form-data"
+              onsubmit="this.querySelector('button').disabled = true; this.querySelector('.spinner-border').classList.remove('d-none');">
+          <div class="input-group">
+            <input type="file" name="arquivo" class="form-control" accept=".zip,.xlsx" required>
+            <button class="btn btn-success">
+              <span class="spinner-border spinner-border-sm me-1 d-none" role="status"></span>
+              <i class="bi bi-upload me-1"></i> Enviar e conferir
+            </button>
+          </div>
+          <div class="form-text">Limite de 1 GB. Arquivos grandes podem levar alguns minutos para enviar.</div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card border-0 shadow-sm mt-3">
+  <div class="card-body small">
+    <h6 class="fw-semibold">Como preencher</h6>
+    <ul class="mb-0">
+      <li>Preencha apenas as colunas <span class="badge text-dark" style="background:#FFF2CC">amarelas</span>:
+        metodologia, preços (até 5), valor de mercado, referência do valor e observação.</li>
+      <li><b>M1/M2:</b> o valor de mercado é a média dos preços, calculada pela planilha; você pode digitar outro valor.</li>
+      <li><b>M3:</b> basta escolher "M3"; o IPCA é buscado e o valor calculado na importação.</li>
+      <li><b>Prints:</b> salve 2 ou 3 imagens na pasta do grupo, em <code>prints/G0001 - …/</code>.
+        Não cole imagens dentro da planilha.</li>
+      <li>Para enviar: botão direito na pasta extraída &gt; <i>Enviar para</i> &gt; <i>Pasta compactada</i>.</li>
+    </ul>
+  </div>
+</div>
+{% endblock %}

@@ -107,6 +107,14 @@
       </div>
     </div>
 
+    {% if in_offline %}
+    <div class="alert alert-warning py-2 mb-3">
+      <i class="bi bi-cloud-arrow-down me-1"></i>
+      Este bem está no seu <strong>pacote offline</strong>. Se avaliá-lo aqui, a linha
+      correspondente da planilha será ignorada na importação.
+    </div>
+    {% endif %}
+
     {# Aviso de grupo #}
     {% if group_size > 1 %}
     <div class="alert alert-info py-2 mb-3">

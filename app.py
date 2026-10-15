@@ -5,7 +5,7 @@ import base64
 import functools
 from datetime import datetime, date
 from flask import (Flask, render_template, request, session, redirect,
-                   url_for, flash, jsonify, send_from_directory, send_file)
+                   url_for, flash, jsonify, send_from_directory, send_file, abort)
 from werkzeug.security import generate_password_hash, check_password_hash
 from PIL import Image
 import io
@@ -18,13 +18,18 @@ from excel_loader import load_excel_files
 from excel_exporter import export_all
 from pdf_report import generate_pdf_report, REFERENCIA_PRECO_LABELS
 from backup import run_backup
+import offline_package as offline
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SCREENSHOTS_DIR = os.path.join(BASE_DIR, 'screenshots')
 
 app = Flask(__name__)
 app.secret_key = 'reavaliacao-bens-camara-2024-chave-secreta'
-app.config['MAX_CONTENT_LENGTH'] = 20 * 1024 * 1024  # 20 MB
+# Limite global alto só por causa da importação offline (zip com prints); as
+# demais rotas continuam limitadas a 20 MB em limit_upload_size().
+app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024 * 1024  # 1 GB
+DEFAULT_UPLOAD_LIMIT = 20 * 1024 * 1024
+LARGE_UPLOAD_ENDPOINTS = {'offline_importar'}
 app.jinja_env.globals['REFERENCIA_PRECO_LABELS'] = REFERENCIA_PRECO_LABELS
 
 
@@ -49,6 +54,31 @@ def planilha_curta_filter(planilha):
     if ' - ' in planilha:
         return planilha.split(' - ', 1)[1]
     return planilha
+
+
+@app.before_request
+def limit_upload_size():
+    if (request.content_length or 0) > DEFAULT_UPLOAD_LIMIT \
+            and request.endpoint not in LARGE_UPLOAD_ENDPOINTS:
+        abort(413)
+
+
+@app.errorhandler(413)
+def request_too_large(_e):
+    flash('Arquivo grande demais para envio.', 'danger')
+    return redirect(request.referrer or url_for('index'))
+
+
+@app.template_filter('data_br')
+def data_br_filter(value):
+    """'2026-10-15T13:50:21' ou '2026-10-15 13:50:21' -> '15/10/2026' (com hora, se houver)."""
+    if not value:
+        return '—'
+    m = re.match(r'(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}:\d{2}))?', str(value))
+    if not m:
+        return value
+    y, mo, d, hm = m.groups()
+    return f'{d}/{mo}/{y}' + (f' {hm}' if hm else '')
 
 
 # ── Decoradores de autenticação ──────────────────────────────────────────────
@@ -288,7 +318,8 @@ def admin_distribuir():
                            planilhas=planilhas,
                            unassigned=unassigned,
                            users_progress=users_progress,
-                           unique_unassigned=unique_unassigned)
+                           unique_unassigned=unique_unassigned,
+                           offline_summary=db.get_offline_checkout_summary())
 
 
 # ── Servidor — Avaliação ─────────────────────────────────────────────────────
@@ -452,7 +483,8 @@ def _render_avaliar(asset_id, asset):
                            next_pending_id=next_pending_id,
                            position=position,
                            group_size=group_size,
-                           group_reviewed_count=group_reviewed_count)
+                           group_reviewed_count=group_reviewed_count,
+                           in_offline=db.is_offline_checkout(asset_id, session['user_id']))
 
 
 # ── Servidor — Desfazer avaliação ────────────────────────────────────────────
@@ -474,6 +506,101 @@ def desfazer_avaliacao(asset_id):
         db.delete_review_single(asset_id)
         flash('Avaliação removida. Você pode refazê-la agora.', 'info')
     return redirect(url_for('avaliar_bem', asset_id=asset_id))
+
+
+# ── Servidor — Avaliação offline ─────────────────────────────────────────────
+
+def _servidor_only():
+    if session.get('role') == 'admin':
+        return redirect(url_for('admin_dashboard'))
+    return None
+
+
+@app.route('/offline')
+@login_required
+def offline_home():
+    if (r := _servidor_only()):
+        return r
+    progress = db.get_user_progress(session['user_id'])
+    checkout = db.get_offline_checkout_summary().get(session['user_id'])
+    return render_template('servidor/offline.html', progress=progress, checkout=checkout)
+
+
+@app.route('/offline/pacote', methods=['POST'])
+@login_required
+def offline_pacote():
+    if (r := _servidor_only()):
+        return r
+    data, filename, n = offline.build_package(session['user_id'], session['user_name'])
+    if not n:
+        flash('Você não tem bens pendentes para avaliar offline.', 'warning')
+        return redirect(url_for('offline_home'))
+    return send_file(io.BytesIO(data), mimetype='application/zip',
+                     as_attachment=True, download_name=filename)
+
+
+@app.route('/offline/importar', methods=['POST'])
+@login_required
+def offline_importar():
+    if (r := _servidor_only()):
+        return r
+    file = request.files.get('arquivo')
+    if not file or not file.filename:
+        flash('Selecione o arquivo .zip (ou .xlsx) para importar.', 'warning')
+        return redirect(url_for('offline_home'))
+    try:
+        token = offline.save_upload(file)
+        offline.parse_upload(token, session['user_id'])
+    except offline.OfflineImportError as e:
+        flash(str(e), 'danger')
+        return redirect(url_for('offline_home'))
+    return redirect(url_for('offline_previa', token=token))
+
+
+@app.route('/offline/importar/<token>')
+@login_required
+def offline_previa(token):
+    if (r := _servidor_only()):
+        return r
+    preview = offline.load_preview(token, session['user_id'])
+    if not preview:
+        flash('Prévia não encontrada ou expirada. Envie o arquivo novamente.', 'warning')
+        return redirect(url_for('offline_home'))
+    counts = {}
+    for item in preview['rows']:
+        counts[item['status']] = counts.get(item['status'], 0) + 1
+    return render_template('servidor/offline_previa.html', token=token,
+                           preview=preview, counts=counts)
+
+
+@app.route('/offline/importar/<token>/confirmar', methods=['POST'])
+@login_required
+def offline_confirmar(token):
+    if (r := _servidor_only()):
+        return r
+    try:
+        res = offline.apply_import(token, session['user_id'])
+    except offline.OfflineImportError as e:
+        flash(str(e), 'danger')
+        return redirect(url_for('offline_home'))
+    msg = (f"Importação concluída: {res['gravados']} grupo(s) avaliado(s), "
+           f"{res['bens']} bem(ns), {res['prints']} print(s).")
+    if res['ignorados']:
+        msg += (f" {res['ignorados']} grupo(s) ignorado(s) porque foram avaliados no sistema "
+                f"depois da prévia.")
+    flash(msg, 'success')
+    return redirect(url_for('offline_home'))
+
+
+@app.route('/offline/importar/<token>/cancelar', methods=['POST'])
+@login_required
+def offline_cancelar(token):
+    if (r := _servidor_only()):
+        return r
+    if offline.load_preview(token, session['user_id']):
+        offline.discard_upload(token)
+    flash('Importação cancelada. Nada foi gravado.', 'info')
+    return redirect(url_for('offline_home'))
 
 
 # ── Servidor — Alterar senha ─────────────────────────────────────────────────
@@ -536,7 +663,36 @@ def admin_usuario_bens(user_id):
         for a in assets if a.get('reviewed_at')
     }
     return render_template('admin/usuario_bens.html', user=user, assets=assets,
-                           group_reviewed_counts=group_reviewed_counts)
+                           group_reviewed_counts=group_reviewed_counts,
+                           offline=db.get_offline_checkout_summary().get(user_id))
+
+
+@app.route('/admin/usuarios/<int:user_id>/offline/pacote', methods=['POST'])
+@admin_required
+def admin_offline_pacote(user_id):
+    user = db.get_user_by_id(user_id)
+    if not user or user['role'] != 'servidor':
+        flash('Servidor não encontrado.', 'danger')
+        return redirect(url_for('admin_usuarios'))
+    data, filename, n = offline.build_package(user_id, user['name'])
+    if not n:
+        flash(f'{user["name"]} não tem bens pendentes para avaliação offline.', 'warning')
+        return redirect(url_for('admin_usuario_bens', user_id=user_id))
+    return send_file(io.BytesIO(data), mimetype='application/zip',
+                     as_attachment=True, download_name=filename)
+
+
+@app.route('/admin/usuarios/<int:user_id>/offline/liberar', methods=['POST'])
+@admin_required
+def admin_offline_liberar(user_id):
+    user = db.get_user_by_id(user_id)
+    if not user:
+        flash('Servidor não encontrado.', 'danger')
+        return redirect(url_for('admin_usuarios'))
+    count = db.clear_offline_checkout(user_id)
+    flash(f'Marcação offline de {user["name"]} liberada ({count} bem(ns)). Esses bens voltam '
+          f'a ser tratados normalmente pela distribuição.', 'success')
+    return redirect(url_for('admin_usuario_bens', user_id=user_id))
 
 
 @app.route('/admin/usuarios/<int:user_id>/export/pdf', methods=['POST'])

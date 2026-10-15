@@ -106,6 +106,10 @@ Bens idênticos avaliados em grupo (mesmo tipo+material+marca+modelo e mesmos da
 
 O botão **Backup Agora** no Dashboard gera imediatamente um `.zip` com o banco de dados e todos os prints, salvo em `backups/` e copiado para a pasta de rede do SEREG. Veja a seção [Backup](#backup) para o agendamento automático.
 
+#### 8. Avaliação Offline (visão do administrador)
+
+Na tela de bens de um servidor, o botão **Pacote offline** gera o pacote de avaliação offline daquele servidor (útil para enviá-lo por outro meio). Enquanto um servidor tem pacote baixado, os bens pendentes do pacote ficam **reservados** para ele: a distribuição balanceada, "desfazer distribuição" e "redistribuir" não os movem. A tela **Distribuir** lista os servidores com reserva, e o botão **Liberar reserva** (na tela de bens do servidor) devolve esses bens à distribuição normal. Avaliações importadas aparecem com o selo **offline** e são identificadas no relatório PDF.
+
 ---
 
 ### Perfil Servidor
@@ -160,6 +164,21 @@ Atualiza o valor contábil do bem desde a data de tombamento até hoje usando o 
 - **Refazer**: abre um modal para desfazer a avaliação atual. Se o bem pertence a um grupo com múltiplos similares avaliados, o modal oferece a opção de desfazer só este bem ou todos os similares do grupo
 - A sidebar lista todos os bens com indicação visual de concluído (✓) ou pendente
 
+#### Avaliação Offline
+
+Para avaliar sem acesso à rede da Câmara (com acesso à internet), use o menu **Offline**:
+
+1. **Baixar pacote offline** (ainda na rede): gera um `.zip` com:
+   - `avaliacao.xlsx` — **uma linha por grupo** de bens idênticos pendentes. As colunas amarelas são para preencher: metodologia (M1/M2/M3), até 5 preços, valor de mercado (média automática, editável), referência do valor e observação. Cada linha traz links para Mercado Livre e Google Shopping e um pedido pronto para colar no Claude/ChatGPT/Gemini.
+   - `prints/` — uma pasta por grupo (ex.: `prints/G0012 - CADEIRA .../`), onde devem ser salvos os 2 ou 3 prints da pesquisa. Não cole imagens dentro da planilha.
+   - `LEIA-ME.txt` — resumo das instruções.
+   - `TUTORIAL.html` — tutorial passo a passo com exemplos, que abre no navegador mesmo sem internet (também disponível pelo link **Ver o tutorial** na tela Offline).
+2. Avalie fora do sistema. Para **M3** basta escolher "M3": o IPCA é buscado e o valor calculado na importação.
+3. De volta à rede, compacte a pasta em `.zip` e envie em **Offline > Importar avaliações** (ou envie só a planilha, se não houver prints).
+4. Confira a **prévia**: linhas prontas, com avisos (ex.: sem print, valor editado), com erro (ex.: M1 sem preço) e em conflito (grupo avaliado pelo sistema ou redistribuído nesse meio-tempo). Clique em **Gravar** para salvar as linhas válidas.
+
+A importação pode ser feita em várias etapas: linhas em branco são ignoradas e linhas já importadas não são gravadas de novo. O limite de envio é 1 GB.
+
 #### Alterar Senha
 
 O servidor pode alterar sua própria senha acessando **Senha** na navbar.
@@ -186,6 +205,7 @@ reavaliacao_bens/
 ├── excel_exporter.py       # Exportação dos resultados para Excel
 ├── pdf_report.py           # Geração do relatório PDF dos bens avaliados
 ├── backup.py               # Backup do banco + prints (local e pasta de rede)
+├── offline_package.py      # Pacote de avaliação offline (download e importação)
 ├── requirements.txt        # Dependências Python
 │
 ├── planilhas_excel/        # Planilhas originais (NUNCA modificar)
@@ -201,15 +221,19 @@ reavaliacao_bens/
 │   │   └── usuario_bens.html   # Bens de um servidor (admin)
 │   └── servidor/
 │       ├── avaliar.html        # Tela principal de avaliação
+│       ├── offline.html        # Baixar pacote / importar avaliação offline
+│       ├── offline_previa.html # Prévia da importação offline
 │       └── minha_senha.html    # Alterar senha
 │
 ├── static/
+│   ├── tutorial_offline.html   # Tutorial da avaliação offline (vai no pacote)
 │   ├── style.css
 │   └── app.js              # Lógica de preços, IPCA, screenshots, metodologias
 │
 ├── reavaliacao.db          # Banco de dados (gerado automaticamente)
 ├── screenshots/            # Prints salvos (gerado automaticamente)
 ├── output/                 # Excel exportados (gerado automaticamente)
+├── offline_uploads/        # Importações offline aguardando confirmação (temporário)
 └── backups/                # Zips de backup + backup_log.txt (gerado automaticamente)
 ```
 
@@ -236,6 +260,7 @@ reavaliacao_bens/
 - Cada servidor só visualiza e avalia os bens atribuídos a ele
 - As planilhas originais nunca são alteradas; a exportação sempre gera novos arquivos
 - Ações administrativas sensíveis (desfazer avaliação) são registradas em `audit_log`
+- Importação offline: só aceita pacotes do próprio servidor, só grava bens ainda atribuídos a ele e pendentes, lê o `.zip` sem extrair caminhos para o disco e valida cada imagem; uploads acima de 20 MB só são aceitos na rota de importação
 
 ### Rede Corporativa
 

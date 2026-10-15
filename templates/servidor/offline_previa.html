@@ -1,0 +1,130 @@
+{% extends 'base.html' %}
+{% block title %}Prévia da Importação{% endblock %}
+{% block container_class %}container-fluid py-3 px-4{% endblock %}
+
+{% block content %}
+{% set STATUS = {
+  'erro':         ('danger',    'bi-x-circle-fill',            'Com erro (não será gravado)'),
+  'conflito':     ('secondary', 'bi-arrow-left-right',         'Conflito (será ignorado)'),
+  'aviso':        ('warning',   'bi-exclamation-triangle-fill','Será gravado, com avisos'),
+  'ok':           ('success',   'bi-check-circle-fill',        'Pronto para gravar'),
+  'ja_importado': ('light',     'bi-check2-all',               'Já importado (sem alteração)'),
+} %}
+{% set gravaveis = counts.get('ok', 0) + counts.get('aviso', 0) %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+  <h4 class="mb-0 fw-bold"><i class="bi bi-list-check me-2 text-primary"></i>Prévia da importação</h4>
+  <a href="{{ url_for('offline_home') }}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left"></i> Voltar
+  </a>
+</div>
+
+<div class="card border-0 shadow-sm mb-3">
+  <div class="card-body">
+    <div class="d-flex flex-wrap gap-2 mb-2">
+      {% for key in ['ok', 'aviso', 'erro', 'conflito', 'ja_importado'] %}
+        {% if counts.get(key) %}
+        {% set st = STATUS[key] %}
+        <span class="badge text-bg-{{ st[0] }} fs-6 fw-normal border">
+          <i class="bi {{ st[1] }} me-1"></i>{{ counts[key] }} · {{ st[2] }}
+        </span>
+        {% endif %}
+      {% endfor %}
+      {% if preview.skipped_blank %}
+      <span class="badge text-bg-light fs-6 fw-normal border">
+        {{ preview.skipped_blank }} linha(s) em branco ignorada(s)
+      </span>
+      {% endif %}
+    </div>
+    <div class="small text-muted">Pacote gerado em {{ preview.gerado_em | data_br }}.</div>
+
+    {% if preview.file_warnings %}
+    <div class="alert alert-warning small py-2 mt-3 mb-0">
+      <b>Avisos do arquivo:</b>
+      <ul class="mb-0">
+        {% for w in preview.file_warnings %}<li>{{ w }}</li>{% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <div class="d-flex flex-wrap gap-2 mt-3">
+      <form method="post" action="{{ url_for('offline_confirmar', token=token) }}"
+            onsubmit="this.querySelector('button').disabled = true; this.querySelector('.spinner-border').classList.remove('d-none');">
+        <button class="btn btn-success" {% if not gravaveis %}disabled{% endif %}>
+          <span class="spinner-border spinner-border-sm me-1 d-none" role="status"></span>
+          <i class="bi bi-check-lg me-1"></i> Gravar {{ gravaveis }} grupo(s)
+        </button>
+      </form>
+      <form method="post" action="{{ url_for('offline_cancelar', token=token) }}">
+        <button class="btn btn-outline-danger"><i class="bi bi-x-lg me-1"></i> Cancelar</button>
+      </form>
+    </div>
+    {% if counts.get('erro') %}
+    <div class="form-text">
+      Linhas com erro não serão gravadas. Corrija a planilha e importe novamente depois —
+      as linhas já gravadas não serão duplicadas.
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% if preview.rows %}
+<div class="card border-0 shadow-sm">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Situação</th>
+            <th>Grupo</th>
+            <th>Bem</th>
+            <th class="text-end">Qtd.</th>
+            <th>Metodologia</th>
+            <th class="text-end">Valor de mercado</th>
+            <th>Referência</th>
+            <th class="text-center">Prints</th>
+            <th>Mensagens</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for key in ['erro', 'conflito', 'aviso', 'ok', 'ja_importado'] %}
+          {% for item in preview.rows if item.status == key %}
+          {% set st = STATUS[key] %}
+          <tr>
+            <td class="text-nowrap">
+              <span class="text-{{ 'secondary' if st[0] == 'light' else st[0] }}"><i class="bi {{ st[1] }}"></i></span>
+              <small>{{ st[2].split(' (')[0] }}</small>
+            </td>
+            <td class="text-nowrap"><small><b>{{ item.code }}</b><br><span class="text-muted">linha {{ item.row }}</span></small></td>
+            <td><small>{{ item.descricao or '—' }}</small></td>
+            <td class="text-end"><small>{{ item.qtd or '' }}</small></td>
+            <td class="text-nowrap">
+              <small>{{ item.metodologia or '—' }}
+              {% if item.ipca is not none %}<br><span class="text-muted">{{ '%.2f' | format(item.ipca) }}% IPCA</span>{% endif %}
+              </small>
+            </td>
+            <td class="text-end text-nowrap">
+              {% if item.valor %}<span class="fw-semibold text-success">{{ item.valor | brl }}</span>{% else %}—{% endif %}
+              {% if item.prices %}<br><small class="text-muted">{{ item.prices | length }} preço(s)</small>{% endif %}
+            </td>
+            <td><small>{{ REFERENCIA_PRECO_LABELS.get(item.referencia, '') if item.referencia else '' }}</small></td>
+            <td class="text-center"><small>{{ item.prints | length if item.metodologia != 'M3' else '—' }}</small></td>
+            <td>
+              <small>
+                {% if item.status_msg %}<div>{{ item.status_msg }}</div>{% endif %}
+                {% for e in item.errors %}<div class="text-danger">{{ e }}</div>{% endfor %}
+                {% for w in item.warnings %}<div class="text-warning-emphasis">{{ w }}</div>{% endfor %}
+                {% if item.observacao %}<div class="text-muted">Obs.: {{ item.observacao }}</div>{% endif %}
+              </small>
+            </td>
+          </tr>
+          {% endfor %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="alert alert-secondary">Nenhuma linha preenchida foi encontrada na planilha.</div>
+{% endif %}
+{% endblock %}

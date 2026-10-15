@@ -31,6 +31,19 @@
 </div>
 {% endif %}
 
+{% if offline_summary %}
+<div class="alert alert-info py-2 mb-3">
+  <i class="bi bi-cloud-arrow-down me-1"></i>
+  <strong>Em avaliação offline</strong> (reservados — não são movidos pela distribuição balanceada,
+  "desfazer distribuição" nem "redistribuir"):
+  {% for u in users if u.id in offline_summary %}
+    <a href="{{ url_for('admin_usuario_bens', user_id=u.id) }}" class="badge text-bg-light border text-decoration-none ms-1">
+      {{ u.name }}: {{ offline_summary[u.id].assets }} bem(ns)
+    </a>
+  {% endfor %}
+</div>
+{% endif %}
+
 <div class="row g-3">
   <!-- Por planilha -->
   <div class="col-md-4">

@@ -80,6 +80,7 @@ def _group_reviews(rows):
                 'ipca_percentual': r['ipca_percentual'],
                 'observacao': r['observacao'],
                 'referencia_preco': r['referencia_preco'],
+                'origem': r['origem'],
                 'screenshot_paths': r['screenshot_paths'],
                 'avaliador': r['avaliador'],
                 'updated_at': r['updated_at'],
@@ -169,7 +170,8 @@ def _entry_block(e, styles):
 
     data_txt = e['updated_at'][:16].replace('T', ' ') if e['updated_at'] else '—'
     block.append(Paragraph(
-        f"<b>Avaliado por:</b> {e['avaliador'] or '—'} &nbsp;·&nbsp; <b>Data:</b> {data_txt}",
+        f"<b>Avaliado por:</b> {e['avaliador'] or '—'} &nbsp;·&nbsp; <b>Data:</b> {data_txt}"
+        + (" &nbsp;·&nbsp; <i>importado de pacote offline</i>" if e['origem'] == 'offline' else ''),
         styles['label']
     ))
 

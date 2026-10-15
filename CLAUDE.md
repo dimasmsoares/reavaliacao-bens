@@ -24,9 +24,10 @@ O banco `reavaliacao.db` e os screenshots são gerados automaticamente na raiz d
 
 ## Arquitetura
 
-### Backend (`app.py`, `database.py`, `excel_loader.py`, `excel_exporter.py`, `pdf_report.py`, `backup.py`)
-- **`app.py`**: Flask app com rotas de autenticação, admin e servidor. Na inicialização: cria banco, admin padrão e importa as planilhas (idempotente). Usa `requests as http_requests` com `verify=False` para a API do BCB (proxy SSL corporativo). Importa `date` de `datetime` para o endpoint `/api/ipca`.
+### Backend (`app.py`, `database.py`, `excel_loader.py`, `excel_exporter.py`, `pdf_report.py`, `backup.py`, `offline_package.py`)
+- **`app.py`**: Flask app com rotas de autenticação, admin e servidor. Na inicialização: cria banco, admin padrão e importa as planilhas (idempotente). Usa `requests as http_requests` com `verify=False` para a API do BCB (proxy SSL corporativo). Importa `date` de `datetime` para o endpoint `/api/ipca`. `MAX_CONTENT_LENGTH` é 1 GB por causa da importação offline; o hook `limit_upload_size()` limita as demais rotas a 20 MB (só endpoints em `LARGE_UPLOAD_ENDPOINTS` passam disso).
 - **`database.py`**: Todas as operações SQLite. Funções nomeadas por entidade (`get_user_*`, `assign_*`, `get_*_progress`, etc.). Funções de remoção de avaliação: `delete_review(asset_id, user_id)` — cascata no grupo do servidor; `delete_review_single(asset_id)` — só este bem; `admin_delete_review(...)` — admin, bem único + audit_log; `admin_delete_review_group(...)` — admin, grupo inteiro + audit_log por bem. `get_group_reviewed_count(asset_id, user_id)` retorna quantas avaliações existem no grupo daquele servidor. `delete_user(user_id)` apaga também as reviews feitas pelo servidor removido (bens voltam a pendentes), além de liberar assignments. `get_reviews_for_report(user_id=None)` retorna os bens avaliados (com dados do bem, da avaliação e do avaliador) para o relatório PDF; `user_id=None` traz todos, informado restringe a um servidor.
+- **`offline_package.py`**: avaliação offline (servidor sem acesso à rede da Câmara). `build_package(user_id, user_name)` gera um `.zip` com `avaliacao.xlsx` (aba `Avaliação`: **uma linha por grupo** pendente do servidor, código `G0001`…, coluna oculta `ID` = bem representante de menor id; colunas amarelas editáveis — metodologia, Preço 1..5, valor de mercado com fórmula de média, referência, observação — com validação de dados; demais colunas bloqueadas por proteção sem senha; aba `_controle` *veryHidden* com versão/`user_id`/data), `LEIA-ME.txt`, `TUTORIAL.html` (cópia de `static/tutorial_offline.html`) e uma pasta vazia `prints/G0001 - <descrição ASCII>/` por grupo; marca os bens em `offline_checkouts`. Os grupos seguem a chave da propagação de `save_review` (tipo+material+marca+modelo, **sem planilha**), via `db.get_pending_groups_for_user`. Importação em duas etapas: `save_upload()` grava o arquivo em `offline_uploads/<token>/`, `parse_upload()` monta a prévia (status por linha: `ok`, `aviso`, `erro`, `conflito`, `ja_importado`; linhas em branco ignoradas) e salva `preview.json`; `apply_import()` reconfere cada grupo (`db.get_user_group_state`) e grava `ok`/`aviso` com `save_review(..., origem='offline')`. Prints são associados pelo código `G\d{4,}` em qualquer parte do caminho dentro do zip, validados com Pillow e salvos como JPEG ≤1280px (`<asset_id>_<ts>_off<idx>.jpg`). M3 usa `ipca_acumulado_por_data()` — uma única chamada à série 433 com 3 tentativas (a API do BCB dá 502 intermitente). Uploads com mais de 1 dia são apagados em `cleanup_old_uploads()`.
 - **`excel_loader.py`**: Lê cada `.xlsx` com `openpyxl`. Detecta dinamicamente a linha de cabeçalho via `_find_data_start()` (busca "NRP" nas primeiras 20 linhas; fallback = 8). Commita por planilha para ser resiliente a interrupções.
 - **`excel_exporter.py`**: Copia os `.xlsx` originais para `output/` e preenche a coluna 10 (VMB). As planilhas têm 18 colunas originais e a coluna 11 é o "ESTADO DE CONSERVAÇÃO (EC)", que **não deve ser sobrescrita**; por isso metodologia (`M1`/`M2`/`M3`) vai na coluna extra 19 e a referência do valor pesquisado (rótulo legível) na coluna 20, ambas com cabeçalho escrito na linha de cabeçalho (detectada via `_find_data_start`) copiando o estilo da coluna 18.
 - **`backup.py`**: `run_backup()` gera um `.zip` com snapshot consistente do banco (`sqlite3.backup`, seguro com WAL e app rodando) + `screenshots/`, salva em `backups/` e copia para a pasta de rede do SEREG (`REMOTE_BACKUP_DIR`); remove backups com mais de `RETENTION_DAYS` (30) nos dois destinos e registra tudo em `backups/backup_log.txt`. Executável via `python backup.py` (Agendador de Tarefas do Windows) ou pelo botão "Backup Agora" do dashboard (`POST /admin/backup`). Falha na cópia de rede não invalida o backup local (`remote_ok=False`).
@@ -45,8 +46,10 @@ O banco `reavaliacao.db` e os screenshots são gerados automaticamente na raiz d
   - `metodologia TEXT DEFAULT "M1"` — `M1`, `M2` ou `M3`
   - `ipca_percentual REAL` — percentual IPCA acumulado (apenas M3)
   - `referencia_preco TEXT` — referência do valor pesquisado (apenas M1/M2, opcional): `novo_igual`, `novo_similar`, `usado_igual`, `usado_similar`. Rótulos em `pdf_report.REFERENCIA_PRECO_LABELS` (exposto ao Jinja como global)
+  - `origem TEXT` — `'offline'` quando veio de importação de pacote offline; NULL = tela de avaliação
   - `user_id INTEGER` — servidor que avaliou
   - `updated_at TEXT`
+- `offline_checkouts`: bens pendentes incluídos no último pacote offline baixado pelo servidor (`asset_id` PK, `user_id`, `created_at`). Baixar novo pacote substitui a marcação do servidor; `save_review` remove as linhas de bens avaliados; o admin pode liberar (`clear_offline_checkout`). Bens marcados são **preservados** por `clear_pending_assignments`, `assign_balanced_spread` e `reassign_pending`.
 - `audit_log`: registro de ações administrativas sensíveis (desfazer avaliações). Campos: `action`, `asset_id`, `admin_id`, `target_user_id`, `justificativa`, `created_at`. Ao desfazer um grupo, cada bem removido gera uma entrada separada.
 
 ### Agrupamento de bens
@@ -55,7 +58,7 @@ A chave de grupo é `COALESCE(tipo,'') || '~~' || material || '~~' || marca || '
 ### Distribuição
 - `assign_by_unique_groups(planilha, n_grupos, user_id)`: seleciona N grupos únicos ainda não atribuídos de uma planilha e atribui todos os bens de cada grupo ao servidor. Garante que nenhum grupo seja dividido entre servidores.
 - `assign_balanced_spread(user_ids)`: redistribui **todos** os bens pendentes (sem review, de qualquer planilha) entre os servidores em `user_ids`. Como avaliar 1 bem de um grupo propaga para os demais do mesmo grupo, a unidade real de esforço é o grupo, não o bem — a função ordena todos os grupos por tamanho decrescente e atribui cada um ao servidor com menos grupos no momento. Isso espalha os grupos gigantes (centenas/milhares de bens idênticos) entre servidores diferentes antes de nivelar o restante. Acionado pelo botão "Distribuição Balanceada" em `/admin/distribuir` (modo `balanceada`).
-- `clear_pending_assignments()`: remove as atribuições de bens ainda **não avaliados** (preserva as de bens já avaliados). Usado internamente por `assign_balanced_spread` e exposto sozinho pelo botão "Desfazer Distribuição" em `/admin/distribuir` (modo `desfazer_distribuicao`), que zera toda a distribuição pendente sem tocar em avaliações já feitas.
+- `clear_pending_assignments()`: remove as atribuições de bens ainda **não avaliados** (preserva as de bens já avaliados e as de bens em avaliação offline). Usado internamente por `assign_balanced_spread` e exposto sozinho pelo botão "Desfazer Distribuição" em `/admin/distribuir` (modo `desfazer_distribuicao`), que zera toda a distribuição pendente sem tocar em avaliações já feitas.
 
 ### Metodologias de avaliação
 - **M1 – Pesquisa de mercado**: servidor registra preços + prints; valor = média (editável).
@@ -63,10 +66,13 @@ A chave de grupo é `COALESCE(tipo,'') || '~~' || material || '~~' || marca || '
 - **M3 – Correção IPCA**: valor = `valor_contabil × (1 + ipca_percentual/100)`. IPCA buscado via `GET /api/ipca?data_inicio=dd/mm/yyyy` → API BCB série 433. Sem obrigatoriedade de prints.
 
 ### Frontend (`templates/`, `static/`)
-- `base.html`: layout Bootstrap 5 + navbar contextual (admin vs. servidor). Servidores têm link "Senha" na navbar.
-- `admin/`: dashboard (progresso global + por planilha com únicos), gerência de servidores, distribuição por grupos únicos, `usuario_bens.html` (tabela de bens com metodologia, referência do valor pesquisado + desfazer com justificativa; quando o bem tem similares avaliados, exibe checkbox para desfazer o grupo inteiro).
+- `base.html`: layout Bootstrap 5 + navbar contextual (admin vs. servidor). Servidores têm links "Avaliar", "Offline" e "Senha" na navbar.
+- `admin/`: dashboard (progresso global + por planilha com únicos), gerência de servidores, distribuição por grupos únicos, `usuario_bens.html` (botão "Pacote offline" que gera o pacote do servidor, aviso de reserva offline com botão "Liberar reserva", tabela de bens com metodologia + selo "offline" quando importado, referência do valor pesquisado + desfazer com justificativa; quando o bem tem similares avaliados, exibe checkbox para desfazer o grupo inteiro).
 - `servidor/avaliar.html`: tela principal — sidebar com filtro de texto + toggle "Só pendentes", seletor de metodologia (radio M1/M2/M3), botões de pesquisa (`#section-search-links`: Mercado Livre/Amazon/Google Shopping/Buscapé + Claude/ChatGPT/Gemini com prompt de pesquisa pré-preenchido via query string e copiado para a área de transferência, classe `.btn-ai-search`), seção de preços (`#section-prices`), seção IPCA (`#section-ipca`), seção de prints (`#section-screenshots`, oculta em M3), campo de valor de mercado editável, radio "Referência do valor pesquisado" (`#section-referencia`, oculto em M3), observação, botão "Refazer" que abre modal — se `group_reviewed_count > 1` oferece opção de desfazer só este bem ou todos os similares do grupo.
 - `servidor/minha_senha.html`: formulário de alteração de senha.
+- `servidor/offline.html`: baixar pacote offline e enviar `.zip`/`.xlsx` para importação. `servidor/offline_previa.html`: prévia da importação agrupada por status, com botões "Gravar N grupo(s)" e "Cancelar".
+- `static/tutorial_offline.html`: tutorial do servidor para a avaliação offline. Página **autônoma** (CSS inline, sem CDN nem imagens externas, claro/escuro) porque é aberta sem acesso à rede; vai no pacote como `TUTORIAL.html` e é linkada na tela Offline. Ao mudar o fluxo offline, atualize-a junto.
+- `servidor/avaliar.html` mostra um aviso quando o bem está no pacote offline do servidor (`in_offline`).
 - `static/app.js`: gerência de preços (add/remove/média), `switchMetodologia()` (alterna seções/labels/readonly), `fetchIPCA()` (async fetch para `/api/ipca`, lê `data-tombamento` e `data-vc` do elemento `#section-ipca`), `updateIPCAValor()` (calcula valor de mercado em M3), screenshots (compressão canvas JPEG 1280px, clipboard, drag&drop, file picker), botões `.btn-ai-search` (copiam `data-ai-prompt` para a área de transferência via `navigator.clipboard`), validação no submit (M3 não exige preços nem prints), filtro da sidebar.
 
 ### Dados passados ao JS no template
@@ -76,6 +82,7 @@ Os valores de `valor_contabil` e `data_tombamento` são passados via atributos `
 - `brl`: formata float como `R$ 1.234,56`
 - `planilha_curta`: extrai a parte após ` - ` do nome da planilha
 - `strip_codigo`: remove código numérico entre parênteses do campo material
+- `data_br`: converte data ISO (`2026-10-15T13:50:21`) para `15/10/2026 13:50`
 
 ### API endpoints relevantes
 - `GET /api/ipca?data_inicio=dd/mm/yyyy` — retorna `{"acumulado": 48.52}` (IPCA % acumulado desde a data até hoje). Usa `requests.get(..., verify=False)` por causa do proxy SSL da rede corporativa.
@@ -83,6 +90,8 @@ Os valores de `valor_contabil` e `data_tombamento` são passados via atributos `
 - `POST /admin/export/pdf` — gera e baixa o relatório PDF global (todos os servidores).
 - `POST /admin/usuarios/<user_id>/export/pdf` — gera e baixa o relatório PDF restrito a um servidor.
 - `POST /admin/backup` — executa `backup.run_backup()` e informa o resultado via flash.
+- `GET /offline` · `POST /offline/pacote` · `POST /offline/importar` · `GET /offline/importar/<token>` · `POST /offline/importar/<token>/confirmar|cancelar` — avaliação offline do servidor.
+- `POST /admin/usuarios/<user_id>/offline/pacote` (gera o pacote de um servidor) · `POST /admin/usuarios/<user_id>/offline/liberar` (libera a reserva offline).
 
 ### Fluxo principal
 1. Admin cria servidores (`/admin/usuarios`) e distribui bens (`/admin/distribuir`) por planilha, grupos únicos ou redistribuição.
@@ -98,3 +107,4 @@ Os valores de `valor_contabil` e `data_tombamento` são passados via atributos `
 - `screenshots/`: prints salvos como `<asset_id>_<timestamp>_<idx>.jpg`
 - `output/`: Excel exportado com avaliações preenchidas
 - `backups/`: zips de backup (banco + screenshots) e `backup_log.txt` (ignorado no git)
+- `offline_uploads/`: arquivos enviados na importação offline aguardando confirmação (temporários, ignorado no git)

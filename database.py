@@ -67,6 +67,15 @@ def init_db():
 
         CREATE INDEX IF NOT EXISTS idx_assets_group
             ON assets (planilha, tipo, material, marca, modelo);
+
+        -- Bens incluídos em um pacote offline baixado pelo servidor ("em avaliação
+        -- offline"). A distribuição preserva esses bens com o servidor até que sejam
+        -- avaliados ou que o admin libere a marcação.
+        CREATE TABLE IF NOT EXISTS offline_checkouts (
+            asset_id    INTEGER PRIMARY KEY REFERENCES assets(id),
+            user_id     INTEGER NOT NULL REFERENCES users(id),
+            created_at  TEXT NOT NULL
+        );
     """)
     conn.commit()
     # Migração: adiciona colunas novas se ainda não existirem
@@ -77,6 +86,7 @@ def init_db():
         ('metodologia',     'TEXT DEFAULT "M1"'),
         ('ipca_percentual', 'REAL'),
         ('referencia_preco','TEXT'),
+        ('origem',          'TEXT'),
     ]:
         try:
             conn.execute(f'ALTER TABLE reviews ADD COLUMN {col} {defn}')
@@ -286,11 +296,13 @@ def assign_by_unique_groups(planilha, n_groups, user_id):
 
 
 def clear_pending_assignments():
-    """Remove atribuições de bens ainda não avaliados (preserva as de bens já avaliados)."""
+    """Remove atribuições de bens ainda não avaliados (preserva as de bens já avaliados
+    e as de bens em avaliação offline)."""
     conn = get_db()
     conn.execute("""
         DELETE FROM assignments
         WHERE asset_id NOT IN (SELECT asset_id FROM reviews)
+          AND asset_id NOT IN (SELECT asset_id FROM offline_checkouts)
     """)
     count = conn.execute("SELECT changes()").fetchone()[0]
     conn.commit()
@@ -316,6 +328,7 @@ def assign_balanced_spread(user_ids):
         FROM assets
         WHERE material IS NOT NULL AND marca IS NOT NULL AND modelo IS NOT NULL
           AND id NOT IN (SELECT asset_id FROM reviews)
+          AND id NOT IN (SELECT asset_id FROM offline_checkouts)
         GROUP BY planilha, COALESCE(tipo,''), material, marca, modelo
         ORDER BY n DESC
     """).fetchall()
@@ -324,6 +337,7 @@ def assign_balanced_spread(user_ids):
         SELECT id FROM assets
         WHERE (material IS NULL OR marca IS NULL OR modelo IS NULL)
           AND id NOT IN (SELECT asset_id FROM reviews)
+          AND id NOT IN (SELECT asset_id FROM offline_checkouts)
     """).fetchall()
 
     load = {uid: {"groups": 0, "assets": 0} for uid in user_ids}
@@ -338,6 +352,7 @@ def assign_balanced_spread(user_ids):
             SELECT id FROM assets
             WHERE planilha = ? AND COALESCE(tipo,'') = ? AND material = ? AND marca = ? AND modelo = ?
               AND id NOT IN (SELECT asset_id FROM reviews)
+              AND id NOT IN (SELECT asset_id FROM offline_checkouts)
         """, (g['planilha'], g['t'], g['material'], g['marca'], g['modelo'])).fetchall()
         for a in rows:
             inserts.append((a['id'], uid, now))
@@ -360,13 +375,15 @@ def assign_balanced_spread(user_ids):
 
 
 def reassign_pending(from_user_id, to_user_id):
-    """Move bens não avaliados de um servidor para outro."""
+    """Move bens não avaliados de um servidor para outro (exceto os em avaliação offline,
+    que só se movem depois que o admin libera a marcação)."""
     now = datetime.utcnow().isoformat()
     conn = get_db()
     conn.execute("""
         UPDATE assignments SET user_id = ?, assigned_at = ?
         WHERE user_id = ?
           AND asset_id NOT IN (SELECT asset_id FROM reviews)
+          AND asset_id NOT IN (SELECT asset_id FROM offline_checkouts)
     """, (to_user_id, now, from_user_id))
     count = conn.execute("SELECT changes()").fetchone()[0]
     conn.commit()
@@ -378,7 +395,8 @@ def get_assets_for_user(user_id):
     conn = get_db()
     rows = conn.execute("""
         SELECT a.*, r.valor_mercado, r.screenshot_path, r.observacao,
-               r.metodologia, r.ipca_percentual, r.referencia_preco, r.updated_at AS reviewed_at
+               r.metodologia, r.ipca_percentual, r.referencia_preco, r.origem,
+               r.updated_at AS reviewed_at
         FROM assets a
         JOIN assignments asg ON a.id = asg.asset_id
         LEFT JOIN reviews r ON a.id = r.asset_id
@@ -428,7 +446,8 @@ def get_adjacent_asset_ids(user_id, current_asset_id):
 
 def save_review(asset_id, user_id, valor_mercado, screenshot_path=None,
                 prices=None, screenshot_paths=None, observacao=None,
-                metodologia='M1', ipca_percentual=None, referencia_preco=None):
+                metodologia='M1', ipca_percentual=None, referencia_preco=None,
+                origem=None):
     now = datetime.utcnow().isoformat()
     prices_json = json.dumps(prices) if prices else None
     paths_json  = json.dumps(screenshot_paths) if screenshot_paths else None
@@ -436,8 +455,8 @@ def save_review(asset_id, user_id, valor_mercado, screenshot_path=None,
     conn.execute("""
         INSERT INTO reviews
             (asset_id, user_id, valor_mercado, screenshot_path, prices, screenshot_paths,
-             observacao, metodologia, ipca_percentual, referencia_preco, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             observacao, metodologia, ipca_percentual, referencia_preco, origem, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(asset_id) DO UPDATE SET
             valor_mercado    = excluded.valor_mercado,
             screenshot_path  = excluded.screenshot_path,
@@ -447,10 +466,11 @@ def save_review(asset_id, user_id, valor_mercado, screenshot_path=None,
             metodologia      = excluded.metodologia,
             ipca_percentual  = excluded.ipca_percentual,
             referencia_preco = excluded.referencia_preco,
+            origem           = excluded.origem,
             user_id          = excluded.user_id,
             updated_at       = excluded.updated_at
     """, (asset_id, user_id, valor_mercado, screenshot_path, prices_json, paths_json,
-          observacao, metodologia, ipca_percentual, referencia_preco, now))
+          observacao, metodologia, ipca_percentual, referencia_preco, origem, now))
 
     fields = conn.execute(
         "SELECT material, marca, modelo, tipo FROM assets WHERE id = ?", (asset_id,)
@@ -459,16 +479,20 @@ def save_review(asset_id, user_id, valor_mercado, screenshot_path=None,
         conn.execute("""
             INSERT OR IGNORE INTO reviews
                 (asset_id, user_id, valor_mercado, screenshot_path, prices, screenshot_paths,
-                 observacao, metodologia, ipca_percentual, referencia_preco, updated_at)
-            SELECT a.id, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                 observacao, metodologia, ipca_percentual, referencia_preco, origem, updated_at)
+            SELECT a.id, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             FROM assets a
             WHERE a.material = ? AND a.marca = ? AND a.modelo = ?
               AND COALESCE(a.tipo, '') = COALESCE(?, '')
               AND a.id != ?
         """, (user_id, valor_mercado, screenshot_path, prices_json, paths_json, observacao,
-              metodologia, ipca_percentual, referencia_preco, now,
+              metodologia, ipca_percentual, referencia_preco, origem, now,
               fields['material'], fields['marca'], fields['modelo'], fields['tipo'], asset_id))
 
+    # Bens avaliados deixam de estar "em avaliação offline"
+    conn.execute(
+        "DELETE FROM offline_checkouts WHERE asset_id IN (SELECT asset_id FROM reviews)"
+    )
     conn.commit()
     conn.close()
 
@@ -567,6 +591,7 @@ def delete_user(user_id):
     libera assignments e apaga o user."""
     conn = get_db()
     conn.execute("DELETE FROM reviews WHERE user_id = ?", (user_id,))
+    conn.execute("DELETE FROM offline_checkouts WHERE user_id = ?", (user_id,))
     conn.execute("DELETE FROM assignments WHERE user_id = ?", (user_id,))
     conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
     conn.commit()
@@ -724,7 +749,7 @@ def get_reviews_for_report(user_id=None):
     if user_id is None:
         rows = conn.execute("""
             SELECT a.nrp, a.planilha, a.material, a.marca, a.modelo, a.tipo,
-                   r.valor_mercado, r.metodologia, r.ipca_percentual, r.observacao, r.referencia_preco,
+                   r.valor_mercado, r.metodologia, r.ipca_percentual, r.observacao, r.referencia_preco, r.origem,
                    r.screenshot_path, r.screenshot_paths, r.user_id, r.updated_at,
                    u.name AS avaliador
             FROM reviews r
@@ -735,7 +760,7 @@ def get_reviews_for_report(user_id=None):
     else:
         rows = conn.execute("""
             SELECT a.nrp, a.planilha, a.material, a.marca, a.modelo, a.tipo,
-                   r.valor_mercado, r.metodologia, r.ipca_percentual, r.observacao, r.referencia_preco,
+                   r.valor_mercado, r.metodologia, r.ipca_percentual, r.observacao, r.referencia_preco, r.origem,
                    r.screenshot_path, r.screenshot_paths, r.user_id, r.updated_at,
                    u.name AS avaliador
             FROM reviews r
@@ -759,3 +784,125 @@ def get_reviews_for_report(user_id=None):
             d['screenshot_paths'] = []
         result.append(d)
     return result
+
+
+# ── Pacote offline ─────────────────────────────────────────────────────────
+
+def get_pending_groups_for_user(user_id):
+    """Grupos de bens pendentes (sem avaliação) atribuídos ao servidor, para o pacote
+    offline. A chave segue a da propagação em save_review (tipo+material+marca+modelo,
+    sem planilha); bens sem material/marca/modelo completos são grupos individuais.
+    Retorna lista de dicts: rep (bem representante, menor id), asset_ids, nrps, planilhas."""
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT a.*
+        FROM assets a
+        JOIN assignments asg ON a.id = asg.asset_id
+        WHERE asg.user_id = ?
+          AND a.id NOT IN (SELECT asset_id FROM reviews)
+        ORDER BY a.planilha, a.row_index
+    """, (user_id,)).fetchall()
+    conn.close()
+    groups = {}
+    for r in rows:
+        if r['material'] and r['marca'] and r['modelo']:
+            key = (r['tipo'] or '', r['material'], r['marca'], r['modelo'])
+        else:
+            key = ('#', r['id'])
+        g = groups.get(key)
+        if g is None:
+            g = groups[key] = {'rep': dict(r), 'asset_ids': [], 'nrps': [], 'planilhas': []}
+        g['asset_ids'].append(r['id'])
+        g['nrps'].append(r['nrp'])
+        if r['planilha'] not in g['planilhas']:
+            g['planilhas'].append(r['planilha'])
+        if r['id'] < g['rep']['id']:
+            g['rep'] = dict(r)
+    return list(groups.values())
+
+
+def get_user_group_state(asset_id, user_id):
+    """Situação, para o servidor, do grupo ao qual o bem pertence, considerando apenas
+    os bens do grupo atribuídos a ele. Retorna None se o bem não existe, senão
+    {'assigned': n, 'pending_ids': [...], 'reviews': [dicts]}."""
+    conn = get_db()
+    f = conn.execute(
+        "SELECT material, marca, modelo, tipo FROM assets WHERE id = ?", (asset_id,)
+    ).fetchone()
+    if not f:
+        conn.close()
+        return None
+    if f['material'] and f['marca'] and f['modelo']:
+        rows = conn.execute("""
+            SELECT a.id, r.asset_id AS reviewed, r.user_id AS review_user_id,
+                   r.valor_mercado, r.origem
+            FROM assets a
+            JOIN assignments asg ON a.id = asg.asset_id
+            LEFT JOIN reviews r ON r.asset_id = a.id
+            WHERE a.material = ? AND a.marca = ? AND a.modelo = ?
+              AND COALESCE(a.tipo, '') = COALESCE(?, '')
+              AND asg.user_id = ?
+            ORDER BY a.id
+        """, (f['material'], f['marca'], f['modelo'], f['tipo'], user_id)).fetchall()
+    else:
+        rows = conn.execute("""
+            SELECT a.id, r.asset_id AS reviewed, r.user_id AS review_user_id,
+                   r.valor_mercado, r.origem
+            FROM assets a
+            JOIN assignments asg ON a.id = asg.asset_id
+            LEFT JOIN reviews r ON r.asset_id = a.id
+            WHERE a.id = ? AND asg.user_id = ?
+        """, (asset_id, user_id)).fetchall()
+    conn.close()
+    return {
+        'assigned': len(rows),
+        'pending_ids': [r['id'] for r in rows if r['reviewed'] is None],
+        'reviews': [dict(r) for r in rows if r['reviewed'] is not None],
+    }
+
+
+def set_offline_checkout(user_id, asset_ids):
+    """Marca os bens como em avaliação offline pelo servidor, substituindo a marcação
+    anterior dele (o pacote mais recente reflete a situação atual)."""
+    now = datetime.utcnow().isoformat()
+    conn = get_db()
+    conn.execute("DELETE FROM offline_checkouts WHERE user_id = ?", (user_id,))
+    conn.executemany(
+        "INSERT OR REPLACE INTO offline_checkouts (asset_id, user_id, created_at) VALUES (?,?,?)",
+        [(aid, user_id, now) for aid in asset_ids]
+    )
+    conn.commit()
+    conn.close()
+
+
+def clear_offline_checkout(user_id):
+    """Libera a marcação offline do servidor. Retorna quantos bens foram liberados."""
+    conn = get_db()
+    conn.execute("DELETE FROM offline_checkouts WHERE user_id = ?", (user_id,))
+    count = conn.execute("SELECT changes()").fetchone()[0]
+    conn.commit()
+    conn.close()
+    return count
+
+
+def get_offline_checkout_summary():
+    """{user_id: {'assets': n, 'since': iso}} dos servidores com bens pendentes em
+    avaliação offline."""
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT user_id, COUNT(*) AS assets, MIN(created_at) AS since
+        FROM offline_checkouts
+        WHERE asset_id NOT IN (SELECT asset_id FROM reviews)
+        GROUP BY user_id
+    """).fetchall()
+    conn.close()
+    return {r['user_id']: {'assets': r['assets'], 'since': r['since']} for r in rows}
+
+
+def is_offline_checkout(asset_id, user_id):
+    conn = get_db()
+    row = conn.execute(
+        "SELECT 1 FROM offline_checkouts WHERE asset_id = ? AND user_id = ?", (asset_id, user_id)
+    ).fetchone()
+    conn.close()
+    return row is not None
