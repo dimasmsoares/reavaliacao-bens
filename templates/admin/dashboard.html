@@ -2,9 +2,9 @@
 {% block title %}Dashboard{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
   <h4 class="mb-0 fw-bold"><i class="bi bi-speedometer2 me-2 text-primary"></i>Dashboard</h4>
-  <div class="d-flex gap-2">
+  <div class="d-flex flex-wrap gap-2">
     <form method="post" action="{{ url_for('admin_export') }}"
           onsubmit="return confirm('Gerar arquivos Excel com os valores preenchidos?')">
       <button class="btn btn-success btn-sm">
@@ -29,8 +29,8 @@
 {% set pct_global = (progress.reviewed / progress.total * 100) | round(1) if progress.total > 0 else 0 %}
 <div class="card mb-4 border-0 shadow-sm">
   <div class="card-body">
-    <div class="d-flex justify-content-between align-items-baseline mb-1">
-      <span class="fw-semibold">Progresso geral</span>
+    <div class="d-flex justify-content-between align-items-baseline flex-wrap gap-1 mb-1">
+      <span class="fw-semibold">Progresso geral <span class="text-success ms-1">{{ pct_global }}%</span></span>
       <span class="text-muted small">
         {{ progress.reviewed | int }} / {{ progress.total | int }} bens
         &nbsp;·&nbsp;
@@ -42,36 +42,35 @@
       </span>
     </div>
     <div class="progress" style="height: 22px;">
-      <div class="progress-bar bg-success fw-semibold" style="width: {{ pct_global }}%">
-        {{ pct_global }}%
-      </div>
+      <div class="progress-bar bg-success" style="width: {{ pct_global }}%"></div>
     </div>
   </div>
 </div>
 
 <div class="row g-3">
   <!-- Servidores -->
-  <div class="col-lg-6">
+  <div class="col-xl-4">
     <div class="card border-0 shadow-sm h-100">
       <div class="card-header bg-white fw-semibold border-0 pb-0">
         <i class="bi bi-people me-1 text-primary"></i> Servidores
       </div>
       <div class="card-body pt-2">
         {% if users_progress %}
-          <table class="table table-sm table-hover mb-0">
+          <div class="table-responsive">
+          <table class="table table-sm table-hover align-middle mb-0">
             <thead class="table-light">
               <tr>
                 <th>Nome</th>
-                <th class="text-end">Atribuídos</th>
-                <th class="text-end">Concluídos</th>
-                <th style="width:35%">Progresso</th>
+                <th class="text-end" title="Bens atribuídos">Atrib.</th>
+                <th class="text-end" title="Bens concluídos">Concl.</th>
+                <th style="width:35%; min-width:70px">Progresso</th>
               </tr>
             </thead>
             <tbody>
               {% for u in users_progress %}
               {% set pct = (u.reviewed / u.total * 100) | round(1) if u.total > 0 else 0 %}
               <tr>
-                <td>{{ u.name }}</td>
+                <td class="text-nowrap">{{ u.name }}</td>
                 <td class="text-end">{{ u.total }}</td>
                 <td class="text-end">{{ u.reviewed }}</td>
                 <td>
@@ -85,6 +84,7 @@
               {% endfor %}
             </tbody>
           </table>
+          </div>
         {% else %}
           <p class="text-muted small mb-0">Nenhum servidor cadastrado ainda.</p>
         {% endif %}
@@ -93,23 +93,24 @@
   </div>
 
   <!-- Por planilha -->
-  <div class="col-lg-6">
+  <div class="col-xl-8">
     <div class="card border-0 shadow-sm h-100">
       <div class="card-header bg-white fw-semibold border-0 pb-0">
         <i class="bi bi-table me-1 text-primary"></i> Por Planilha
       </div>
       <div class="card-body pt-2">
         {% if planilha_progress %}
-          <table class="table table-sm table-hover mb-0">
+          <div class="table-responsive">
+          <table class="table table-sm table-hover align-middle mb-0">
             <thead class="table-light">
               <tr>
-                <th>Planilha</th>
+                <th style="min-width:220px">Planilha</th>
                 <th class="text-end" title="Total de registros (principais + agregações)">Total</th>
                 <th class="text-end" title="Bens principais (Tipo vazio)">Princ.</th>
                 <th class="text-end" title="Agregações ao bem principal">Agr.</th>
                 <th class="text-end" title="Grupos únicos por tipo+material+marca+modelo — avaliar 1 propaga para idênticos">Únicos*</th>
                 <th class="text-end">Avaliados</th>
-                <th style="width:22%">Progresso</th>
+                <th style="width:18%; min-width:110px">Progresso</th>
               </tr>
             </thead>
             <tbody>
@@ -117,8 +118,12 @@
               {% set pct = (p.reviewed / p.total * 100) | round(1) if p.total > 0 else 0 %}
               {% set unicos = unique_counts.get(p.planilha, p.total) %}
               <tr>
-                <td class="text-truncate" style="max-width:160px"
-                    title="{{ p.planilha }}">{{ p.planilha | planilha_curta }}</td>
+                <td title="{{ p.planilha }}">
+                  <div class="lh-sm">{{ p.planilha | planilha_curta }}</div>
+                  {% if ' - ' in p.planilha %}
+                  <small class="text-muted">{{ p.planilha.split(' - ', 1)[0] }}</small>
+                  {% endif %}
+                </td>
                 <td class="text-end">{{ p.total }}</td>
                 <td class="text-end text-secondary">{{ p.principais }}</td>
                 <td class="text-end text-secondary">{{ p.agregacoes }}</td>
@@ -135,6 +140,7 @@
               {% endfor %}
             </tbody>
           </table>
+          </div>
           <p class="text-muted" style="font-size:.75rem; padding:.5rem .75rem 0">
             * Grupos únicos por tipo + material + marca + modelo — avaliar 1 propaga para todos os idênticos do mesmo tipo.
           </p>
